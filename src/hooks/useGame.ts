@@ -1,12 +1,12 @@
 import { useState, useCallback } from 'react';
 import type { Piece, Position, Direction, GameState, GamePhase, Action, ValidTarget, Team, Score } from '../types/game';
 import {
-  COLS, ROWS, PIECE_TYPES, CARDINAL, GOAL_LIMIT,
+  COLS, ROWS, PIECE_TYPES, CARDINAL, ALL_DIRS, GOAL_LIMIT,
 } from '../game/constants';
 import {
   inBounds, isGoal, inPenaltyBox, getTeamBox,
   chebDist, getValidMoves, getValidPassTargets,
-  getShotPath, traceLine, pieceAt, teamPieces, getBallHolder,
+  getShotPath, pieceAt, teamPieces, getBallHolder,
   isGKVulnerable, isValidSetupPlacement,
   createEmptyPieces, getDefaultFormation,
   hasClearShotToGoal, findVacantAdjacent, oppositeTeam,
@@ -27,6 +27,9 @@ const INITIAL_STATE: GameState = {
   message: '',
   score: { A: 0, B: 0 },
   extraAction: false,
+  actionPoints: 2,
+  actedPieces: [],
+  extraActionPieceId: null,
   lastTackledId: null,
   lastTouch: null,
   setupPiecesA: [],
@@ -55,6 +58,8 @@ export default function useGame() {
         pieces: allPieces,
         ballHolderId: cfA?.id ?? null,
         turn: 'A',
+        actionPoints: 2,
+        actedPieces: [],
         message: '⚽ Game started! Team Blue goes first.',
       });
     } else {
@@ -191,8 +196,31 @@ export default function useGame() {
       if (!piece || !piece.active) return prev;
       if (piece.team !== prev.turn) return prev;
 
-      // GK must-pass-out enforcement: if GK has ball and must pass out,
-      // prevent selecting other pieces
+      // Stunned check: tackled players skip their next turn
+      if (piece.stunned) {
+        return {
+          ...prev,
+          selectedPieceId: null,
+          selectedAction: null,
+          validTargets: [],
+          availableActions: [],
+          message: `💫 ${PIECE_TYPES[piece.type].name} is stunned and cannot act this turn!`,
+        };
+      }
+
+      // Already acted check
+      if (prev.actedPieces.includes(piece.id) && !prev.extraAction) {
+        return {
+          ...prev,
+          selectedPieceId: null,
+          selectedAction: null,
+          validTargets: [],
+          availableActions: [],
+          message: `⛔ ${PIECE_TYPES[piece.type].name} already acted this turn.`,
+        };
+      }
+
+      // GK must-pass-out enforcement
       if (prev.gkMustPassOut) {
         const gk = prev.pieces.find(p => p.type === 'GK' && p.team === prev.turn && p.active);
         if (gk && gk.hasBall && piece.id !== gk.id) {
@@ -201,33 +229,63 @@ export default function useGame() {
       }
 
       const type = PIECE_TYPES[piece.type];
-      const actions: Action[] = [];
+      const isExtraAction = prev.extraAction;
+      const cost = piece.hasBall ? 2 : 1;
+
+      // Check AP
+      if (!isExtraAction && prev.actionPoints < cost) {
+        return {
+          ...prev,
+          selectedPieceId: null,
+          selectedAction: null,
+          validTargets: [],
+          availableActions: [],
+          message: `Not enough AP (need ${cost}, have ${prev.actionPoints}).`,
+        };
+      }
 
       const moves = getValidMoves(piece, prev.pieces, prev.lastTouch);
+      const actions: Action[] = [];
       if (moves.length > 0) actions.push('move');
 
-      if (!prev.extraAction && piece.hasBall) {
-        const passTargets = getValidPassTargets(piece, prev.pieces);
-        if (passTargets.length > 0) actions.push('pass');
+      if (isExtraAction) {
+        // Extra action from tackle: only move, unless ball-holding MF
+        if (piece.type === 'MF' && piece.hasBall) {
+          // Ball-holding MF can use full actions during extra action
+          if (piece.hasBall) {
+            const passTargets = getValidPassTargets(piece, prev.pieces);
+            if (passTargets.length > 0) actions.push('pass');
+          }
+          if (type.canShoot && piece.hasBall && !prev.firstTurn) actions.push('shoot');
+          if (piece.hasBall && type.canShoot && !prev.firstTurn) actions.push('through-ball');
+        }
+      } else {
+        // Normal action
+        if (piece.hasBall) {
+          const passTargets = getValidPassTargets(piece, prev.pieces);
+          if (passTargets.length > 0) actions.push('pass');
+          if (type.canShoot && !prev.firstTurn) actions.push('shoot');
+          if (type.canChip && !prev.firstTurn) actions.push('chip');
+          if ((type.canShoot || piece.type === 'GK') && !prev.firstTurn) actions.push('through-ball');
+        }
       }
 
-      if (type.canShoot && piece.hasBall && !prev.firstTurn && !prev.extraAction) actions.push('shoot');
-      if (type.canChip && piece.hasBall && !prev.firstTurn && !prev.extraAction) actions.push('chip');
-      if (piece.hasBall && type.canShoot && !prev.firstTurn && !prev.extraAction) actions.push('through-ball');
-
-      // GK pass-out: only allow pass for GK when gkMustPassOut is active
+      // GK pass-out filter
       let filteredActions = actions;
       if (prev.gkMustPassOut && piece.type === 'GK') {
-        filteredActions = actions.filter(a => a === 'pass');
+        if (actions.includes('pass')) {
+          filteredActions = actions.filter(a => a === 'pass');
+        }
       }
 
+      const apMsg = isExtraAction ? ' (FREE extra action)' : ` (${cost} AP)`;
       return {
         ...prev,
         selectedPieceId: pieceId,
         validTargets: moves,
         selectedAction: null,
         availableActions: filteredActions,
-        message: `Selected ${type.name}. Choose action.`,
+        message: `Selected ${type.name}.${apMsg}`,
       };
     });
   }, []);
@@ -262,7 +320,7 @@ export default function useGame() {
         const type = PIECE_TYPES[piece.type];
         const range = isChip ? type.chipRange : type.shootRange;
         const dirs: Direction[] = [];
-        for (const d of CARDINAL) {
+        for (const d of ALL_DIRS) {
           const path = getShotPath(piece.col, piece.row, d, prev.pieces, range);
           if (path.length > 1) dirs.push({ ...d });
         }
@@ -278,7 +336,7 @@ export default function useGame() {
         const type = PIECE_TYPES[piece.type];
         const range = type.shootRange;
         const dirs: Direction[] = [];
-        for (const d of CARDINAL) {
+        for (const d of ALL_DIRS) {
           const path = getShotPath(piece.col, piece.row, d, prev.pieces, range);
           if (path.length > 1) dirs.push({ ...d });
         }
@@ -309,6 +367,11 @@ export default function useGame() {
       let newBallHolderId = prev.ballHolderId;
       let newScore: Score = { ...prev.score };
       let newExtraAction = prev.extraAction;
+      let newExtraActionPieceId = prev.extraActionPieceId;
+      let newActionPoints = prev.actionPoints;
+      let newActedPieces: string[] = [...prev.actedPieces];
+      let newGoalKickoff = false;
+      let newGoalScoringTeam: Team | null = null;
       let newLastTackledId = prev.lastTackledId;
       let newLastTouch = prev.lastTouch;
       let newFirstTurn = prev.firstTurn;
@@ -333,7 +396,7 @@ export default function useGame() {
             newBallHolderId = mover.id;
             newLastTouch = mover.team;
             newLastTackledId = targetPiece.id;
-            targetPiece.canCounterTackle = false;
+            targetPiece.stunned = true;
 
             // If moving INTO the opponent's cell, displace them; otherwise (adjacent tackle) they stay
             if (t.col === targetPiece.col && t.row === targetPiece.row) {
@@ -348,10 +411,10 @@ export default function useGame() {
 
             if (piece.type === 'MF') {
               newExtraAction = true;
-              message = `${PIECE_TYPES[piece.type].name} tackled! Extra move.`;
+              message = `${PIECE_TYPES[piece.type].name} tackled! Extra action! 🎯`;
             } else {
               newExtraAction = true;
-              message = `${PIECE_TYPES[piece.type].name} tackled! Extra move.`;
+              message = `${PIECE_TYPES[piece.type].name} tackled! Extra action! 🎯`;
             }
           } else {
             return prev;
@@ -373,15 +436,8 @@ export default function useGame() {
           }
         }
 
-        // Turn switch logic
-        if (newExtraAction && validTarget.type === 'tackle') {
-          // Extra action granted — same turn continues
-        } else {
-          if (newExtraAction) newExtraAction = false;
-          nextTurn = oppositeTeam(prev.turn);
-          if (nextTurn === 'A') newTurnNumber++;
-          newFirstTurn = false;
-        }
+        // Turn switch will be handled centrally below
+        nextTurn = prev.turn;
       }
 
       /* ── PASS ── */
@@ -394,36 +450,6 @@ export default function useGame() {
         const targetPiece = newPieces.find(p => p.id === targetPieceId);
         const passer = newPieces.find(p => p.id === piece.id);
         if (!targetPiece || !passer || !passer.hasBall) return prev;
-
-        // GK interception along pass path
-        const passPath = traceLine(passer.col, passer.row, targetPiece.col, targetPiece.row);
-        let intercepted = false;
-        for (const cell of passPath) {
-          if (cell.col === passer.col && cell.row === passer.row) continue;
-          if (cell.col === targetPiece.col && cell.row === targetPiece.row) continue;
-          const oppGK = newPieces.find(p =>
-            p.type === 'GK' && p.active && p.team !== passer.team
-            && chebDist(p, cell) <= 1
-          );
-          if (oppGK) {
-            intercepted = true;
-            message = `${PIECE_TYPES[oppGK.type].name} intercepted the pass!`;
-            oppGK.hasBall = true;
-            newBallHolderId = oppGK.id;
-            newLastTouch = oppGK.team;
-            break;
-          }
-        }
-
-        if (intercepted) {
-          nextTurn = oppositeTeam(prev.turn);
-          if (nextTurn === 'A') newTurnNumber++;
-          newFirstTurn = false;
-          newExtraAction = false;
-          newGkMustPassOut = true; // GK just intercepted
-          return produceResult(prev, newPieces, message, nextTurn, newTurnNumber,
-            newBallHolderId, newScore, newExtraAction, newLastTackledId, newLastTouch, newFirstTurn, gameOver, newGkMustPassOut, newBallPosition);
-        }
 
         passer.hasBall = false;
         targetPiece.hasBall = true;
@@ -445,12 +471,10 @@ export default function useGame() {
             }
             newLastTouch = null;
             newGkMustPassOut = false;
-            nextTurn = oppTeam;
-            if (nextTurn === 'A') newTurnNumber++;
-            newFirstTurn = false;
             newExtraAction = false;
+            message += ' ⚠️ Turnover!';
             return produceResult(prev, newPieces, message, nextTurn, newTurnNumber,
-              newBallHolderId, newScore, newExtraAction, newLastTackledId, newLastTouch, newFirstTurn, gameOver, newGkMustPassOut, newBallPosition);
+              newBallHolderId, newScore, newExtraAction, newExtraActionPieceId, newLastTackledId, newLastTouch, newFirstTurn, gameOver, newGkMustPassOut, newBallPosition);
           }
           newGkMustPassOut = false; // GK successfully passed out
         }
@@ -478,6 +502,7 @@ export default function useGame() {
                 const oppGK = newPieces.find(p => p.team !== team && p.type === 'GK' && p.active);
                 if (oppGK) { oppGK.hasBall = true; newBallHolderId = oppGK.id; }
                 newLastTouch = null;
+                if (!gameOver) { newGoalKickoff = true; newGoalScoringTeam = team; }
               } else {
                 message = 'Shot missed!';
               }
@@ -503,16 +528,10 @@ export default function useGame() {
             }
           }
 
-          nextTurn = oppositeTeam(prev.turn);
-          if (nextTurn === 'A') newTurnNumber++;
-          newFirstTurn = false;
-          newExtraAction = false;
+          nextTurn = prev.turn;
         } else {
           message = `${PIECE_TYPES[passer.type].name} passed to ${PIECE_TYPES[targetPiece.type].name}.`;
-          nextTurn = oppositeTeam(prev.turn);
-          if (nextTurn === 'A') newTurnNumber++;
-          newFirstTurn = false;
-          newExtraAction = false;
+          nextTurn = prev.turn;
         }
       }
 
@@ -576,12 +595,10 @@ export default function useGame() {
           const oppGK = newPieces.find(p => p.team !== piece.team && p.type === 'GK' && p.active);
           if (oppGK) { oppGK.hasBall = true; newBallHolderId = oppGK.id; }
           newLastTouch = null;
+          if (!gameOver) { newGoalKickoff = true; newGoalScoringTeam = piece.team; }
         }
 
-        nextTurn = oppositeTeam(prev.turn);
-        if (nextTurn === 'A') newTurnNumber++;
-        newFirstTurn = false;
-        newExtraAction = false;
+        nextTurn = prev.turn;
       }
 
       /* ── THROUGH BALL ── */
@@ -641,16 +658,86 @@ export default function useGame() {
           }
         }
 
-        nextTurn = oppositeTeam(prev.turn);
-        if (nextTurn === 'A') newTurnNumber++;
-        newFirstTurn = false;
+        nextTurn = prev.turn;
+      }
+
+      /* ── GOAL KICKOFF: reset to default formation ── */
+      if (newGoalKickoff && newGoalScoringTeam) {
+        const concedingTeam = oppositeTeam(newGoalScoringTeam);
+        const formA = getDefaultFormation('A');
+        const formB = getDefaultFormation('B');
+        newPieces = [...formA, ...formB];
+
+        // Find conceding team's piece closest to center (row 9)
+        const concedingPieces = newPieces.filter(p => p.team === concedingTeam);
+        const closest = concedingPieces.reduce((a, b) =>
+          Math.abs(a.row - 9) <= Math.abs(b.row - 9) ? a : b
+        );
+        const kickoffer = newPieces.find(p => p.id === closest.id)!;
+        kickoffer.col = 7;
+        kickoffer.row = 9;
+        kickoffer.hasBall = true;
+
+        newBallHolderId = kickoffer.id;
+        newLastTouch = null;
+        newGkMustPassOut = false;
+        newBallPosition = null;
+        nextTurn = concedingTeam;
         newExtraAction = false;
+        newExtraActionPieceId = null;
+        newGoalKickoff = false;
+        newGoalScoringTeam = null;
+
+        message += ' 🔄 Kickoff!';
+      }
+
+      /* ── ACTION ECONOMY: AP & acted tracking (no auto turn switch) ── */
+      if (!newGoalKickoff && !gameOver) {
+        const isExtraAction = prev.extraAction;
+        const wasTackle = action === 'move' && (target as any)?.type === 'tackle';
+
+        if (isExtraAction) {
+          // Free extra action consumed
+          newExtraAction = false;
+        } else {
+          // Deduct AP
+          const actedPiece = prev.pieces.find(p => p.id === prev.selectedPieceId);
+          const cost = actedPiece?.hasBall ? 2 : 1;
+          newActionPoints = prev.actionPoints - cost;
+
+          // Track acted piece
+          if (prev.selectedPieceId && !prev.actedPieces.includes(prev.selectedPieceId)) {
+            newActedPieces = [...prev.actedPieces, prev.selectedPieceId];
+          }
+
+          // Tackle grants extra action
+          if (wasTackle) {
+            newExtraAction = true;
+          }
+        }
+
+        // Stay on same turn — player must click End Turn manually
+        newTurnNumber = prev.turnNumber;
+        newFirstTurn = prev.firstTurn;
+        nextTurn = prev.turn;
+      } else if (newGoalKickoff) {
+        // Goal kickoff resets the turn for conceding team
+        newActionPoints = 2;
+        newActedPieces = [];
+        newExtraAction = false;
+        newExtraActionPieceId = null;
+        newFirstTurn = false; // Not first turn anymore
+        // nextTurn is already set to concedingTeam by kickoff block
+        // Don't increment turnNumber — conceding team kicks off within the same game period
       }
 
       // Reset counter-tackle for team that just finished (their next turn they can tackle again)
       if (nextTurn !== prev.turn) {
         newPieces.forEach(p => {
-          if (p.team === prev.turn) p.canCounterTackle = true;
+          // Clear stun for the team that just finished (their stunned piece served its penalty)
+          if (p.stunned && p.team === prev.turn) {
+            p.stunned = false;
+          }
         });
       }
 
@@ -680,7 +767,7 @@ export default function useGame() {
       }
 
       return produceResult(prev, newPieces, message, nextTurn, newTurnNumber,
-        newBallHolderId, newScore, newExtraAction, newLastTackledId, newLastTouch, newFirstTurn, gameOver, newGkMustPassOut, newBallPosition);
+        newBallHolderId, newScore, newExtraAction, newExtraActionPieceId, newLastTackledId, newLastTouch, newFirstTurn, gameOver, newGkMustPassOut, newBallPosition, newActionPoints, newActedPieces);
     });
   }, []);
 
@@ -696,6 +783,29 @@ export default function useGame() {
     }));
   }, []);
 
+  /* ─── End turn (manual) ─── */
+  const endTurn = useCallback(() => {
+    setState(prev => {
+      if (prev.phase !== 'playing') return prev;
+      const next = oppositeTeam(prev.turn);
+      return {
+        ...prev,
+        selectedPieceId: null,
+        selectedAction: null,
+        validTargets: [],
+        availableActions: [],
+        turn: next,
+        turnNumber: next === 'A' ? prev.turnNumber + 1 : prev.turnNumber,
+        firstTurn: false,
+        actionPoints: 2,
+        actedPieces: [],
+        extraAction: false,
+        extraActionPieceId: null,
+        message: `⏭️ Turn ended. ${next === 'A' ? "🔵 Team Blue" : "🔴 Team Red"}'s turn.`,
+      };
+    });
+  }, []);
+
   /* ─── Restart ─── */
   const restart = useCallback(() => setState(INITIAL_STATE), []);
 
@@ -708,6 +818,7 @@ export default function useGame() {
     selectAction,
     executeAction,
     cancelSelection,
+    endTurn,
     restart,
   };
 }
@@ -722,12 +833,15 @@ function produceResult(
   newBallHolderId: string | null,
   newScore: Score,
   newExtraAction: boolean,
+  newExtraActionPieceId: string | null,
   newLastTackledId: string | null,
   newLastTouch: Team | null,
   newFirstTurn: boolean,
   gameOver: boolean,
   newGkMustPassOut: boolean = false,
   newBallPosition: Position | null = null,
+  newActionPoints: number = 2,
+  newActedPieces: string[] = [],
 ): GameState {
   if (gameOver) {
     return {
@@ -745,6 +859,9 @@ function produceResult(
       validTargets: [],
       availableActions: [],
       extraAction: false,
+      extraActionPieceId: null,
+      actionPoints: 2,
+      actedPieces: [],
       firstTurn: false,
       gkMustPassOut: false,
     };
@@ -755,6 +872,7 @@ function produceResult(
     phase: 'playing',
     pieces: newPieces,
     ballHolderId: newBallHolderId,
+    score: newScore,
     turn: nextTurn,
     turnNumber: newTurnNumber,
     selectedPieceId: null,
@@ -762,6 +880,9 @@ function produceResult(
     validTargets: [],
     availableActions: [],
     extraAction: newExtraAction,
+    extraActionPieceId: newExtraActionPieceId,
+    actionPoints: newActionPoints,
+    actedPieces: newActedPieces,
     lastTackledId: newLastTackledId,
     lastTouch: newLastTouch,
     message,

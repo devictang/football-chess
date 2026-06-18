@@ -5,7 +5,7 @@ import Board from './components/Board';
 import ActionPanel from './components/ActionPanel';
 import SetupPhase from './components/SetupPhase';
 import GameOver from './components/GameOver';
-import { PIECE_TYPES, TEAM_COLORS } from './game/constants';
+import { PIECE_TYPES, TEAM_COLORS, GOAL_LIMIT } from './game/constants';
 
 export default function App() {
   const {
@@ -17,13 +17,14 @@ export default function App() {
     selectAction,
     executeAction,
     cancelSelection,
+    endTurn,
     restart,
   } = useGame();
 
   const {
     phase, pieces, turn, turnNumber, ballHolderId, ballPosition,
     selectedPieceId, selectedAction, validTargets, availableActions,
-    message, score, extraAction, firstTurn,
+    message, score, extraAction, firstTurn, actionPoints, actedPieces,
     setupPiecesA, setupPiecesB, setupPieceIndex, setupTeam, lastTouch,
   } = state;
 
@@ -164,9 +165,12 @@ export default function App() {
               availableActions={availableActions as any}
               selectedAction={selectedAction}
               extraAction={extraAction}
+              actionPoints={actionPoints}
+              actedPiecesCount={actedPieces.length}
               firstTurn={firstTurn}
               onSelectAction={selectAction}
               onCancel={cancelSelection}
+              onEndTurn={endTurn}
               turn={turn}
               turnNumber={turnNumber}
               message={message}

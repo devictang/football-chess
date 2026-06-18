@@ -24,7 +24,7 @@ export interface Piece {
   row: number;
   active: boolean;
   hasBall: boolean;
-  canCounterTackle: boolean;
+  stunned: boolean;
   index: number;
 }
 
@@ -88,6 +88,9 @@ export interface GameState {
   message: string;
   score: Score;
   extraAction: boolean;
+  actionPoints: number;
+  actedPieces: string[];
+  extraActionPieceId: string | null;
   lastTackledId: string | null;
   lastTouch: Team | null;
   setupPiecesA: Piece[];

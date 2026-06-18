@@ -6,7 +6,7 @@ import {
   BOX_TOP, BOX_BOTTOM, PIECE_TYPES, TEAM_COLORS,
   CARDINAL,
 } from '../game/constants';
-import { isGoal, inPenaltyBox, pieceAt, getBallHolder, isGKVulnerable } from '../game/engine';
+import { isGoal, inPenaltyBox, pieceAt, getBallHolder, isGKVulnerable, chebDist } from '../game/engine';
 
 /* ─── Types ─── */
 interface BoardProps {
@@ -34,6 +34,7 @@ interface CellProps {
   isPassTgt: boolean;
   isTackleTgt: boolean;
   isDirection: boolean;
+  isGkAura: boolean;
   isLooseBall: boolean;
   directionIcon: string;
   onClick: () => void;
@@ -41,11 +42,12 @@ interface CellProps {
 }
 
 /* ─── Cell ─── */
-function Cell({ col, row, isGoalCell, isCenterLine, isPenalty, isTarget, isPassTgt, isTackleTgt, isDirection, isLooseBall, directionIcon, onClick, children }: CellProps) {
+function Cell({ col, row, isGoalCell, isCenterLine, isPenalty, isTarget, isPassTgt, isTackleTgt, isDirection, isGkAura, isLooseBall, directionIcon, onClick, children }: CellProps) {
   const isLight = (col + row) % 2 === 0;
   let baseClass = isLight ? 'bg-emerald-700/60' : 'bg-emerald-800/60';
-  if (isGoalCell) baseClass = 'goal-zone bg-yellow-600/30';
+  if (isGoalCell) baseClass = 'goal-zone bg-yellow-500/25';
   if (isPenalty) baseClass = 'bg-blue-900/15';
+  if (isGkAura) baseClass = isLight ? 'bg-amber-500/20' : 'bg-amber-600/20';
   const borderClass = isCenterLine ? 'border-t-2 border-t-white/40' : 'border border-emerald-600/15';
 
   return (
@@ -56,6 +58,23 @@ function Cell({ col, row, isGoalCell, isCenterLine, isPenalty, isTarget, isPassT
       whileHover={{ scale: 1.08 }}
       transition={{ type: 'spring', stiffness: 400, damping: 25 }}
     >
+      {/* Goal net indicator on goal cells */}
+      {isGoalCell && (
+        <div className="absolute inset-0 z-1 pointer-events-none"
+             style={{
+               backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(255,255,200,0.08) 2px, rgba(255,255,200,0.08) 4px), repeating-linear-gradient(-45deg, transparent, transparent 2px, rgba(255,255,200,0.08) 2px, rgba(255,255,200,0.08) 4px)',
+             }}
+        />
+      )}
+      {/* GK aura ring */}
+      {isGkAura && (
+        <motion.div
+          className="absolute inset-0 border-2 border-amber-400/50 rounded-sm z-5"
+          animate={{ opacity: [0.4, 0.8, 0.4] }}
+          transition={{ duration: 2, repeat: Infinity }}
+        />
+      )}
+
       {/* Target indicators */}
       {isTarget && !isTackleTgt && (
         <motion.div
@@ -81,11 +100,14 @@ function Cell({ col, row, isGoalCell, isCenterLine, isPenalty, isTarget, isPassT
       )}
       {isDirection && (
         <motion.div
-          className="absolute inset-0 flex items-center justify-center text-xs z-10 text-white/40"
-          initial={{ scale: 0.5 }}
-          animate={{ scale: 1 }}
+          className="absolute inset-0 flex items-center justify-center z-10"
+          initial={{ scale: 0.3, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: 'spring', stiffness: 200, damping: 15 }}
         >
-          {directionIcon}
+          <span className="text-yellow-300/90 drop-shadow-lg text-sm font-bold leading-none">
+            {directionIcon}
+          </span>
         </motion.div>
       )}
 
@@ -99,12 +121,12 @@ function Cell({ col, row, isGoalCell, isCenterLine, isPenalty, isTarget, isPassT
 }
 
 /* ─── Piece View ─── */
-function PieceView({ piece, isSelected, isBallHolder, isGkInvincible, cannotTackle, onClick }: {
+function PieceView({ piece, isSelected, isBallHolder, isGkInvincible, isStunned, onClick }: {
   piece: Piece;
   isSelected: boolean;
   isBallHolder: boolean;
   isGkInvincible: boolean;
-  cannotTackle: boolean;
+  isStunned: boolean;
   onClick: () => void;
 }) {
   const type = PIECE_TYPES[piece.type];
@@ -116,7 +138,7 @@ function PieceView({ piece, isSelected, isBallHolder, isGkInvincible, cannotTack
 
   return (
     <motion.div
-      className={`absolute inset-0.5 rounded-full bg-gradient-to-br ${teamGrad} ${borderRing} ${gkShield} flex items-center justify-center z-20 cursor-pointer ${cannotTackle ? 'opacity-60' : ''}`}
+      className={`absolute inset-0.5 rounded-full bg-gradient-to-br ${teamGrad} ${borderRing} ${gkShield} flex items-center justify-center z-20 cursor-pointer ${isStunned ? 'opacity-50 saturate-0' : ''}`}
       onClick={(e) => { e.stopPropagation(); onClick(); }}
       layout
       transition={{ type: 'spring', stiffness: 300, damping: 25, mass: 0.8 }}
@@ -127,7 +149,7 @@ function PieceView({ piece, isSelected, isBallHolder, isGkInvincible, cannotTack
       </span>
       {isBallHolder && <span className="absolute -top-1 -right-1 text-[10px] z-30">⚽</span>}
       {isGkInvincible && <span className="absolute -bottom-1 text-[8px] z-30 drop-shadow-md">🛡️</span>}
-      {cannotTackle && <span className="absolute -bottom-1 text-[8px] z-30 drop-shadow-md">🔒</span>}
+      {isStunned && <span className="absolute -bottom-1 text-[8px] z-30 drop-shadow-md">💫</span>}
     </motion.div>
   );
 }
@@ -148,20 +170,23 @@ export default function Board({
     }
     if (phase !== 'playing') return;
 
-    // Direction actions take priority
+    // Direction actions take priority (cardinal + diagonal)
     if (selectedAction === 'shoot' || selectedAction === 'chip' || selectedAction === 'through-ball') {
       const selPiece = pieces.find(pp => pp.id === selectedPieceId);
       if (selPiece) {
         const dc = col - selPiece.col;
         const dr = row - selPiece.row;
-        if ((dc === 0 || dr === 0) && !(dc === 0 && dr === 0)) {
+        const isCardinal = (dc === 0 || dr === 0) && !(dc === 0 && dr === 0);
+        const isDiagonal = Math.abs(dc) === Math.abs(dr) && dc !== 0;
+        if (isCardinal || isDiagonal) {
           const dir: Direction = { dc: Math.sign(dc), dr: Math.sign(dr) };
           const matches = (validTargets as Direction[]).some(t => t.dc === dir.dc && t.dr === dir.dr);
           if (matches) {
-            // Only fire if within piece's range
+            // Only fire if within piece's range (Chebyshev distance for diagonal)
             const ptype = PIECE_TYPES[selPiece.type];
             const range = selectedAction === 'chip' ? ptype.chipRange : ptype.shootRange;
-            if (Math.abs(dc) + Math.abs(dr) <= range) {
+            const dist = Math.max(Math.abs(dc), Math.abs(dr));
+            if (dist <= range) {
               onCellClick(dir);
               return;
             }
@@ -205,15 +230,17 @@ export default function Board({
     if (!selPiece) return { active: false, icon: '' };
     const dc = col - selPiece.col;
     const dr = row - selPiece.row;
-    if ((dc === 0 || dr === 0) && !(dc === 0 && dr === 0)) {
+    const isCardinal = (dc === 0 || dr === 0) && !(dc === 0 && dr === 0);
+    const isDiagonal = Math.abs(dc) === Math.abs(dr) && dc !== 0;
+    if (isCardinal || isDiagonal) {
       const dir: Direction = { dc: Math.sign(dc), dr: Math.sign(dr) };
       const active = (validTargets as Direction[]).some(t => t.dc === dir.dc && t.dr === dir.dr);
       if (!active) return { active: false, icon: '' };
-      // Only show dots within piece's range
+      // Only show dots within piece's range (Chebyshev distance for diagonal)
       const ptype = PIECE_TYPES[selPiece.type];
       const range = selectedAction === 'chip' ? ptype.chipRange : ptype.shootRange;
-      const dist = Math.abs(dc) + Math.abs(dr);
-      return { active: dist <= range, icon: '·' };
+      const dist = Math.max(Math.abs(dc), Math.abs(dr));
+      return { active: dist <= range, icon: '●' };
     }
     return { active: false, icon: '' };
   };
@@ -255,6 +282,12 @@ export default function Board({
                 const p = pieceAt(pieces, c, r);
                 const dirInfo = getDirectionInfo(c, r);
 
+                // GK aura: cells within 1 Chebyshev distance of an active GK
+                const isGkAura = pieces.some(piece =>
+                  piece.type === 'GK' && piece.active
+                  && chebDist(piece, { col: c, row: r }) <= 1
+                );
+
                 return (
                   <Cell
                     key={`${c}-${r}`}
@@ -266,6 +299,7 @@ export default function Board({
                     isPassTgt={isPassTargetCell(c, r)}
                     isTackleTgt={isTackleCell(c, r)}
                     isDirection={dirInfo.active}
+                    isGkAura={isGkAura && phase === 'playing'}
                     isLooseBall={ballPosition !== null && ballPosition.col === c && ballPosition.row === r}
                     directionIcon={dirInfo.icon}
                     onClick={() => handleCellClick(c, r)}
@@ -276,7 +310,7 @@ export default function Board({
                         isSelected={p.id === selectedPieceId}
                         isBallHolder={p.id === ballHolderId}
                         isGkInvincible={p.type === 'GK' && !isGKVulnerable(p, lastTouch)}
-                        cannotTackle={!p.canCounterTackle}
+                        isStunned={p.stunned}
                         onClick={() => handleCellClick(c, r)}
                       />
                     )}

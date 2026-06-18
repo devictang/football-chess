@@ -22,7 +22,7 @@ export const HALF: Record<string, HalfBounds> = {
 export const PIECE_TYPES: Record<string, PieceTypeConfig> = {
   GK: {
     label: 'GK', name: 'Goalkeeper', count: 1,
-    moveRange: 1, passRange: 3, shootRange: 4, chipRange: 0,
+    moveRange: 1, passRange: 5, shootRange: 4, chipRange: 0,
     canMoveDiag: false, canShoot: false, canChip: false,
     tackleRange: 1, interceptZone: 1,
     colorClass: 'from-yellow-400 to-yellow-600',
@@ -42,7 +42,6 @@ export const PIECE_TYPES: Record<string, PieceTypeConfig> = {
     colorClass: 'from-green-400 to-green-600',
     highPressRange: 8,
     extraActionAfterTackle: true,
-    extraActionRestriction: 'move-only',
   },
   WG: {
     label: 'WG', name: 'Winger', count: 2,
@@ -94,4 +93,4 @@ export const ACTION_LABELS: Record<string, string> = {
 };
 
 /* ─── Win Condition ─── */
-export const GOAL_LIMIT = 5;
+export const GOAL_LIMIT = 3;

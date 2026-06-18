@@ -82,7 +82,7 @@ export function getValidMoves(piece: Piece, pieces: Piece[], lastTouch: string |
   const type = PIECE_TYPES[piece.type];
   const maxRange = type.moveRange;
   const results: MoveTarget[] = [];
-  const dirs = type.canMoveDiag ? ALL_DIRS : CARDINAL;
+  const dirs = ALL_DIRS;
 
   for (const { dc, dr } of dirs) {
     for (let step = 1; step <= maxRange; step++) {
@@ -96,16 +96,14 @@ export function getValidMoves(piece: Piece, pieces: Piece[], lastTouch: string |
       if (piece.type === 'GK' && !inPenaltyBox(nc, nr)) continue;
 
       if (!occupant) {
-        // Can't tackle if this piece was just tackled (anti-loop)
+        // Adjacent tackle: moving next to an opponent ball-holder
         let adjTarget: Piece | null = null;
-        if (piece.canCounterTackle) {
-          for (const { dc: ndc, dr: ndr } of CARDINAL) {
-            const adj = pieceAt(pieces, nc + ndc, nr + ndr);
-            if (adj && adj.team !== piece.team && adj.hasBall) {
-              if (adj.type === 'GK' && !isGKVulnerable(adj, lastTouch)) continue;
-              adjTarget = adj;
-              break;
-            }
+        for (const { dc: ndc, dr: ndr } of ALL_DIRS) {
+          const adj = pieceAt(pieces, nc + ndc, nr + ndr);
+          if (adj && adj.team !== piece.team && adj.hasBall) {
+            if (adj.type === 'GK' && !isGKVulnerable(adj, lastTouch)) continue;
+            adjTarget = adj;
+            break;
           }
         }
         if (adjTarget) {
@@ -120,7 +118,7 @@ export function getValidMoves(piece: Piece, pieces: Piece[], lastTouch: string |
         // GK invincibility: cannot tackle GK unless vulnerable
         if (occupant.type === 'GK' && !isGKVulnerable(occupant, lastTouch)) {
           // GK is invincible, can't tackle
-        } else if (piece.canCounterTackle) {
+        } else {
           results.push({ col: nc, row: nr, type: 'tackle', targetId: occupant.id });
         }
       }
@@ -146,25 +144,17 @@ export function getValidMoves(piece: Piece, pieces: Piece[], lastTouch: string |
   return results;
 }
 
-/* ─── Valid Pass Targets ─── */
+/* ─── Valid Pass Targets (Manhattan distance, no straight-line restriction) ─── */
 export function getValidPassTargets(piece: Piece, pieces: Piece[]): PassTarget[] {
   const type = PIECE_TYPES[piece.type];
   const maxRange = type.passRange;
   const targets: PassTarget[] = [];
 
-  for (const { dc, dr } of CARDINAL) {
-    for (let step = 1; step <= maxRange; step++) {
-      const nc = piece.col + dc * step;
-      const nr = piece.row + dr * step;
-      if (!inBounds(nc, nr)) break;
-
-      const occ = pieceAt(pieces, nc, nr);
-      if (occ) {
-        if (occ.team === piece.team && occ.id !== piece.id) {
-          targets.push({ pieceId: occ.id, col: nc, row: nr, dist: step });
-        }
-        break;
-      }
+  for (const p of pieces) {
+    if (!p.active || p.id === piece.id || p.team !== piece.team) continue;
+    const dist = manhattan(piece, p);
+    if (dist <= maxRange && dist > 0) {
+      targets.push({ pieceId: p.id, col: p.col, row: p.row, dist });
     }
   }
   return targets;
@@ -253,7 +243,7 @@ export function getDefaultFormation(team: string): Piece[] {
     row: r[t.type],
     active: true,
     hasBall: false,
-    canCounterTackle: true,
+    stunned: false,
     index: idx,
   }));
 }
@@ -268,7 +258,7 @@ export function createEmptyPieces(team: string): Piece[] {
     row: -1,
     active: false,
     hasBall: false,
-    canCounterTackle: true,
+    stunned: false,
     index: idx,
   }));
 }
