@@ -67,6 +67,8 @@ export type ValidTarget = MoveTarget | PassTarget | Direction;
 /* ─── Game Phase ─── */
 export type GamePhase = 'menu' | 'setup-a' | 'setup-b' | 'playing' | 'gameover';
 
+export type GameMode = 'quick' | 'ai' | 'pvp';
+
 /* ─── Score ─── */
 export interface Score {
   A: number;
@@ -77,6 +79,7 @@ export interface Score {
 export interface GameState {
   phase: GamePhase;
   pieces: Piece[];
+  gameMode: GameMode;
   turn: Team;
   turnNumber: number;
   ballHolderId: string | null;
@@ -97,6 +100,7 @@ export interface GameState {
   setupPiecesB: Piece[];
   setupPieceIndex: number;
   setupTeam: Team;
+  setupSelectedPieceId: string | null;
   firstTurn: boolean;
   gkMustPassOut: boolean;
 }

@@ -11,8 +11,11 @@ export default function App() {
   const {
     state,
     startGame,
+    startSetup,
+    setupSelectPiece,
     setupPlacePiece,
     quickSetupPieces,
+    setupConfirm,
     selectPiece,
     selectAction,
     executeAction,
@@ -25,7 +28,8 @@ export default function App() {
     phase, pieces, turn, turnNumber, ballHolderId, ballPosition,
     selectedPieceId, selectedAction, validTargets, availableActions,
     message, score, extraAction, firstTurn, actionPoints, actedPieces,
-    setupPiecesA, setupPiecesB, setupPieceIndex, setupTeam, lastTouch,
+    setupPiecesA, setupPiecesB, setupTeam, lastTouch, gameMode,
+    setupSelectedPieceId,
   } = state;
 
   const selectedPiece = selectedPieceId
@@ -79,7 +83,7 @@ export default function App() {
           <div className="flex flex-col gap-3 w-full max-w-[260px] mt-2">
             <motion.button
               className="w-full px-6 py-3.5 bg-gradient-to-r from-blue-600 to-blue-700 rounded-2xl font-bold text-sm shadow-lg"
-              onClick={() => startGame(true)}
+              onClick={startGame}
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.97 }}
             >
@@ -87,11 +91,19 @@ export default function App() {
             </motion.button>
             <motion.button
               className="w-full px-6 py-3 bg-white/10 hover:bg-white/20 rounded-2xl font-semibold text-sm"
-              onClick={() => startGame(false)}
+              onClick={() => startSetup('ai')}
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.97 }}
             >
-              🎯 Manual Setup
+              🤖 vs AI · Manual Setup
+            </motion.button>
+            <motion.button
+              className="w-full px-6 py-3 bg-white/10 hover:bg-white/20 rounded-2xl font-semibold text-sm"
+              onClick={() => startSetup('pvp')}
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+            >
+              👥 vs Player · Manual Setup
             </motion.button>
           </div>
 
@@ -120,17 +132,33 @@ export default function App() {
 
   /* ─── Setup phases ─── */
   if (phase === 'setup-a' || phase === 'setup-b') {
+    // For vs AI with Team B setup (shouldn't happen since AI auto-placed)
+    // For PvP, show setup for current team
     return (
-      <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-start py-3 px-1">
+      <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-start py-3 px-2">
         <SetupPhase
           setupPiecesA={setupPiecesA}
           setupPiecesB={setupPiecesB}
-          setupPieceIndex={setupPieceIndex}
           setupTeam={setupTeam}
           phase={phase}
+          gameMode={gameMode}
+          setupSelectedPieceId={setupSelectedPieceId}
           message={message}
           onCellClick={handleCellClick}
+          onPieceClick={(id) => {
+            // In setup, clicking a placed piece returns it to roster
+            // But we need the cell coords for that — handled in setupPlacePiece
+            // For roster selection:
+            const team = phase === 'setup-a' ? 'A' : 'B';
+            const pieces = team === 'A' ? setupPiecesA : setupPiecesB;
+            const p = pieces.find(pp => pp.id === id);
+            if (p && !p.active) {
+              setupSelectPiece(id);
+            }
+          }}
+          onSelectRosterPiece={setupSelectPiece}
           onQuickSetup={quickSetupPieces}
+          onConfirm={setupConfirm}
         />
       </div>
     );

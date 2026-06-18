@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import type { Piece, Direction, Position, ValidTarget, MoveTarget, PassTarget, GamePhase, Team } from '../types/game';
+import type { Piece, Direction, Position, ValidTarget, MoveTarget, PassTarget, GamePhase, Team, HalfBounds } from '../types/game';
 import {
   COLS, ROWS, GOAL_START, GOAL_END,
   BOX_TOP, BOX_BOTTOM, PIECE_TYPES, TEAM_COLORS,
@@ -22,6 +22,7 @@ interface BoardProps {
   onCellClick: (target: unknown) => void;
   onPieceClick: (id: string) => void;
   showLabels?: boolean;
+  viewRows?: HalfBounds; // Only render a subset of rows (setup half-view)
 }
 
 interface CellProps {
@@ -157,7 +158,7 @@ function PieceView({ piece, isSelected, isBallHolder, isGkInvincible, isStunned,
 /* ─── Main Board ─── */
 export default function Board({
   pieces, selectedPieceId, selectedAction, validTargets,
-  ballHolderId, ballPosition, lastTouch, turn, phase, onCellClick, onPieceClick, showLabels = true,
+  ballHolderId, ballPosition, lastTouch, turn, phase, onCellClick, onPieceClick, showLabels = true, viewRows,
 }: BoardProps) {
   const ballHolder = getBallHolder(pieces);
 
@@ -261,7 +262,10 @@ export default function Board({
           {/* Row labels */}
           {showLabels && (
             <div className="flex flex-col flex-shrink-0">
-              {Array.from({ length: ROWS }, (_, r) => (
+              {(viewRows
+                ? Array.from({ length: viewRows.rowMax - viewRows.rowMin + 1 }, (_, i) => viewRows.rowMin + i)
+                : Array.from({ length: ROWS }, (_, r) => r)
+              ).map(r => (
                 <div key={`rl-${r}`} className={`flex items-center justify-center text-[8px] ${r === 9 ? 'text-white/60 font-bold' : 'text-white/30'}`}
                      style={{ width: 20, height: 32 }}>{r === 9 ? '—' : r}</div>
               ))}
@@ -273,11 +277,16 @@ export default function Board({
             className="grid gap-0"
             style={{
               gridTemplateColumns: `repeat(${COLS}, 32px)`,
-              gridTemplateRows: `repeat(${ROWS}, 32px)`,
+              gridTemplateRows: viewRows
+                ? `repeat(${viewRows.rowMax - viewRows.rowMin + 1}, 32px)`
+                : `repeat(${ROWS}, 32px)`,
               minWidth: COLS * 32,
             }}
           >
-            {Array.from({ length: ROWS }, (_, r) =>
+            {(viewRows
+              ? Array.from({ length: viewRows.rowMax - viewRows.rowMin + 1 }, (_, i) => viewRows.rowMin + i)
+              : Array.from({ length: ROWS }, (_, r) => r)
+            ).map(r =>
               Array.from({ length: COLS }, (_, c) => {
                 const p = pieceAt(pieces, c, r);
                 const dirInfo = getDirectionInfo(c, r);

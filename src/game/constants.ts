@@ -18,6 +18,12 @@ export const HALF: Record<string, HalfBounds> = {
   B: { rowMin: 0, rowMax: 8 },    // Team Red at top
 };
 
+/* ─── Half-view ranges for Board ─── */
+export const HALF_VIEW: Record<string, HalfBounds> = {
+  A: { rowMin: 9, rowMax: 18 },
+  B: { rowMin: 0, rowMax: 9 },
+};
+
 /* ─── Piece Type Definitions ─── */
 export const PIECE_TYPES: Record<string, PieceTypeConfig> = {
   GK: {

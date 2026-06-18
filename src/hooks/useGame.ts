@@ -1,10 +1,10 @@
 import { useState, useCallback } from 'react';
-import type { Piece, Position, Direction, GameState, GamePhase, Action, ValidTarget, Team, Score } from '../types/game';
+import type { Piece, Position, Direction, GameState, GamePhase, Action, ValidTarget, Team, Score, GameMode } from '../types/game';
 import {
   COLS, ROWS, PIECE_TYPES, CARDINAL, ALL_DIRS, GOAL_LIMIT,
 } from '../game/constants';
 import {
-  inBounds, isGoal, inPenaltyBox, getTeamBox,
+  inBounds, isGoal, inPenaltyBox, getTeamBox, inOwnHalf,
   chebDist, getValidMoves, getValidPassTargets,
   getShotPath, pieceAt, teamPieces, getBallHolder,
   isGKVulnerable, isValidSetupPlacement,
@@ -16,6 +16,7 @@ import {
 const INITIAL_STATE: GameState = {
   phase: 'menu',
   pieces: [],
+  gameMode: 'quick',
   turn: 'A',
   turnNumber: 1,
   ballHolderId: null,
@@ -36,6 +37,7 @@ const INITIAL_STATE: GameState = {
   setupPiecesB: [],
   setupPieceIndex: 0,
   setupTeam: 'A',
+  setupSelectedPieceId: null,
   firstTurn: true,
   gkMustPassOut: false,
 };
@@ -43,36 +45,47 @@ const INITIAL_STATE: GameState = {
 export default function useGame() {
   const [state, setState] = useState<GameState>(INITIAL_STATE);
 
-  /* ─── Start ─── */
-  const startGame = useCallback((quickSetup: boolean = false) => {
-    if (quickSetup) {
-      const piecesA = getDefaultFormation('A');
-      const piecesB = getDefaultFormation('B');
-      const allPieces = [...piecesA, ...piecesB];
-      const cfA = allPieces.find(p => p.team === 'A' && p.type === 'CF');
-      if (cfA) cfA.hasBall = true;
+  /* ─── Quick Start ─── */
+  const startGame = useCallback(() => {
+    const piecesA = getDefaultFormation('A');
+    const piecesB = getDefaultFormation('B');
+    const allPieces = [...piecesA, ...piecesB];
+    const cfA = allPieces.find(p => p.team === 'A' && p.type === 'CF');
+    if (cfA) cfA.hasBall = true;
 
-      setState({
-        ...INITIAL_STATE,
-        phase: 'playing',
-        pieces: allPieces,
-        ballHolderId: cfA?.id ?? null,
-        turn: 'A',
-        actionPoints: 2,
-        actedPieces: [],
-        message: '⚽ Game started! Team Blue goes first.',
-      });
-    } else {
-      setState({
-        ...INITIAL_STATE,
-        phase: 'setup-a',
-        setupPiecesA: createEmptyPieces('A'),
-        setupPiecesB: createEmptyPieces('B'),
-        setupPieceIndex: 0,
-        setupTeam: 'A',
-        message: `🔵 Team Blue: Place 1/8 — ${PIECE_TYPES.GK.name} (must be in penalty box)`,
-      });
-    }
+    setState({
+      ...INITIAL_STATE,
+      gameMode: 'quick',
+      phase: 'playing',
+      pieces: allPieces,
+      ballHolderId: cfA?.id ?? null,
+      turn: 'A',
+      actionPoints: 2,
+      actedPieces: [],
+      message: '⚽ Game started! Team Blue goes first.',
+    });
+  }, []);
+
+  /* ─── Start Manual Setup ─── */
+  const startSetup = useCallback((mode: GameMode) => {
+    setState({
+      ...INITIAL_STATE,
+      gameMode: mode,
+      phase: 'setup-a',
+      setupPiecesA: createEmptyPieces('A'),
+      setupPiecesB: createEmptyPieces('B'),
+      setupSelectedPieceId: null,
+      setupTeam: 'A',
+      message: `🔵 Team Blue: Click a piece in the roster, then click your half to place it.`,
+    });
+  }, []);
+
+  /* ─── Setup: select piece from roster ─── */
+  const setupSelectPiece = useCallback((pieceId: string) => {
+    setState(prev => {
+      if (prev.phase !== 'setup-a' && prev.phase !== 'setup-b') return prev;
+      return { ...prev, setupSelectedPieceId: pieceId, validTargets: [], message: `Selected ${PIECE_TYPES[pieceId.split('-')[1]].name} — click on your half to place.` };
+    });
   }, []);
 
   /* ─── Setup: place piece ─── */
@@ -87,72 +100,54 @@ export default function useGame() {
         ...prev.setupPiecesB.filter(p => p.active),
       ];
 
-      if (!isValidSetupPlacement(team, col, row, allActive)) return prev;
+      // If clicking on own placed piece → return it to roster
+      const clickedOwn = allActive.find(p => p.col === col && p.row === row && p.team === team);
+      if (clickedOwn) {
+        const updatedPieces = setupPieces.map(p =>
+          p.id === clickedOwn.id ? { ...p, col: -1, row: -1, active: false } : p
+        );
+        const result: any = { setupSelectedPieceId: null };
+        if (team === 'A') result.setupPiecesA = updatedPieces;
+        else result.setupPiecesB = updatedPieces;
+        result.message = `${PIECE_TYPES[clickedOwn.type].name} returned to roster.`;
+        return { ...prev, ...result };
+      }
 
-      const idx = prev.setupPieceIndex;
-      if (idx >= 8) return prev;
-      const piece = setupPieces[idx];
+      // If no piece selected from roster, ignore
+      if (!prev.setupSelectedPieceId) return { ...prev, message: 'Click a piece in the roster first!' };
+
+      const piece = setupPieces.find(p => p.id === prev.setupSelectedPieceId);
       if (!piece) return prev;
 
+      // GK must be in penalty box
       if (piece.type === 'GK' && !inPenaltyBox(col, row)) {
-        return { ...prev, message: 'Goalkeeper must be placed in the penalty box!' };
+        return { ...prev, message: '🧤 Goalkeeper must be placed in the penalty box!' };
       }
 
-      const updatedPieces = [...setupPieces];
-      updatedPieces[idx] = { ...piece, col, row, active: true };
-      const nextIdx = idx + 1;
-      const allPlaced = nextIdx >= 8;
-
-      if (team === 'A') {
-        if (allPlaced) {
-          return {
-            ...prev,
-            setupPiecesA: updatedPieces,
-            setupPieceIndex: 0,
-            phase: 'setup-b' as GamePhase,
-            setupTeam: 'B' as Team,
-            message: `🔴 Team Red: Place 1/8 — ${PIECE_TYPES.GK.name} (must be in penalty box)`,
-          };
-        }
-        return {
-          ...prev,
-          setupPiecesA: updatedPieces,
-          setupPieceIndex: nextIdx,
-          message: `🔵 Place ${nextIdx + 1}/8 — ${PIECE_TYPES[setupPieces[nextIdx].type].name}`,
-        };
+      // Must be in own half
+      if (!inOwnHalf(team, row)) {
+        return { ...prev, message: 'Pieces must be placed in your own half!' };
       }
 
-      // Team B
-      if (allPlaced) {
-        const allActivePieces = [
-          ...prev.setupPiecesA.filter(p => p.active),
-          ...updatedPieces.filter(p => p.active),
-        ];
-        const cfA = allActivePieces.find(p => p.team === 'A' && p.type === 'CF');
-        if (cfA) cfA.hasBall = true;
-
-        return {
-          ...prev,
-          setupPiecesB: updatedPieces,
-          pieces: allActivePieces,
-          ballHolderId: cfA?.id ?? null,
-          phase: 'playing' as GamePhase,
-          turn: 'A' as Team,
-          turnNumber: 1,
-          message: '⚽ Game started! Team Blue goes first.',
-          firstTurn: true,
-        };
+      // Cell must be empty
+      if (pieceAt(allActive, col, row)) {
+        return { ...prev, message: 'That cell is already occupied!' };
       }
-      return {
-        ...prev,
-        setupPiecesB: updatedPieces,
-        setupPieceIndex: nextIdx,
-        message: `🔴 Place ${nextIdx + 1}/8 — ${PIECE_TYPES[setupPieces[nextIdx].type].name}`,
-      };
+
+      const updatedPieces = setupPieces.map(p =>
+        p.id === prev.setupSelectedPieceId ? { ...p, col, row, active: true } : p
+      );
+
+      const result: any = { setupSelectedPieceId: null };
+      if (team === 'A') result.setupPiecesA = updatedPieces;
+      else result.setupPiecesB = updatedPieces;
+      result.message = `${PIECE_TYPES[piece.type].name} placed at (${col}, ${row}). Click another piece or adjust.`;
+
+      return { ...prev, ...result };
     });
   }, []);
 
-  /* ─── Quick setup during setup ─── */
+  /* ─── Setup: auto-place ─── */
   const quickSetupPieces = useCallback(() => {
     setState(prev => {
       if (prev.phase !== 'setup-a' && prev.phase !== 'setup-b') return prev;
@@ -163,30 +158,86 @@ export default function useGame() {
         return {
           ...prev,
           setupPiecesA: formation,
-          setupPieceIndex: 0,
-          phase: 'setup-b' as GamePhase,
-          setupTeam: 'B' as Team,
-          message: `🔴 Team Red: Place your pieces on the bottom half.`,
+          setupSelectedPieceId: null,
+          message: '🔵 Team Blue auto-placed! Click Confirm if ready.',
         };
       }
-
-      const allActive = [...prev.setupPiecesA.filter(p => p.active), ...formation];
-      const cfA = allActive.find(p => p.team === 'A' && p.type === 'CF');
-      if (cfA) cfA.hasBall = true;
 
       return {
         ...prev,
         setupPiecesB: formation,
-        pieces: allActive,
-        ballHolderId: cfA?.id ?? null,
-        phase: 'playing' as GamePhase,
-        turn: 'A' as Team,
-        turnNumber: 1,
-        message: '⚽ Game started! Team Blue goes first.',
-        firstTurn: true,
+        setupSelectedPieceId: null,
+        message: '🔴 Team Red auto-placed! Click Confirm if ready.',
       };
     });
   }, []);
+
+  /* ─── Setup: confirm formation ─── */
+  const setupConfirm = useCallback(() => {
+    setState(prev => {
+      if (prev.phase !== 'setup-a' && prev.phase !== 'setup-b') return prev;
+      const team = prev.phase === 'setup-a' ? 'A' : 'B';
+      const setupPieces = team === 'A' ? prev.setupPiecesA : prev.setupPiecesB;
+      const placedCount = setupPieces.filter(p => p.active).length;
+
+      if (placedCount < 8) {
+        return { ...prev, message: `Place all 8 pieces first (${placedCount}/8 placed)!` };
+      }
+
+      if (prev.gameMode === 'pvp') {
+        // PvP: move to opponent's setup
+        if (team === 'A') {
+          return {
+            ...prev,
+            phase: 'setup-b' as GamePhase,
+            setupTeam: 'B' as Team,
+            setupSelectedPieceId: null,
+            message: '🔴 Team Red: Click a piece in the roster, then click your half to place it.',
+          };
+        }
+        // Both teams placed: start game
+        return startGameAfterSetup(prev);
+      }
+
+      // vs AI: Player A placed, auto-place AI (Team B), start game
+      if (team === 'A') {
+        const aiPieces = getDefaultFormation('B');
+        return startGameAfterSetup({
+          ...prev,
+          setupPiecesB: aiPieces,
+        });
+      }
+
+      // Fallback (shouldn't reach here for vs AI with team B, since AI auto-placed)
+      return startGameAfterSetup(prev);
+    });
+  }, []);
+
+  /* ─── Helper: transition from setup to playing ─── */
+  function startGameAfterSetup(prev: GameState): GameState {
+    const allActive = [
+      ...prev.setupPiecesA.filter(p => p.active),
+      ...prev.setupPiecesB.filter(p => p.active),
+    ];
+    const cfA = allActive.find(p => p.team === 'A' && p.type === 'CF');
+    if (cfA) cfA.hasBall = true;
+
+    return {
+      ...prev,
+      pieces: allActive,
+      ballHolderId: cfA?.id ?? null,
+      phase: 'playing' as GamePhase,
+      turn: 'A' as Team,
+      turnNumber: 1,
+      firstTurn: true,
+      selectedPieceId: null,
+      selectedAction: null,
+      validTargets: [],
+      availableActions: [],
+      setupSelectedPieceId: null,
+      message: '⚽ Game started! Team Blue goes first.',
+    };
+  }
 
   /* ─── Select piece ─── */
   const selectPiece = useCallback((pieceId: string) => {
@@ -820,8 +871,11 @@ export default function useGame() {
   return {
     state,
     startGame,
+    startSetup,
+    setupSelectPiece,
     setupPlacePiece,
     quickSetupPieces,
+    setupConfirm,
     selectPiece,
     selectAction,
     executeAction,
