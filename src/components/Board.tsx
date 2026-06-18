@@ -120,7 +120,7 @@ function Cell({ col, row, isGoalCell, isCenterLine, isPenalty, isTarget, isPassT
 
       {isPassRange && !isPassTgt && !isDirection && !isTarget && !isTackleTgt && (
         <motion.div
-          className="absolute inset-0 bg-blue-400/8 z-3"
+          className="absolute inset-0 bg-blue-500/15 border border-blue-400/25 z-3 rounded-sm"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
         />

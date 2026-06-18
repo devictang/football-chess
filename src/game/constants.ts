@@ -35,7 +35,7 @@ export const PIECE_TYPES: Record<string, PieceTypeConfig> = {
   },
   DF: {
     label: 'DF', name: 'Defender', count: 2,
-    moveRange: 1, passRange: 5, shootRange: 4, chipRange: 0,
+    moveRange: 1, passRange: 7, shootRange: 4, chipRange: 0,
     canMoveDiag: false, canShoot: true, canChip: false,
     tackleRange: 1, interceptZone: 0,
     colorClass: 'from-blue-400 to-blue-600',
