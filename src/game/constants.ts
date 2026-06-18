@@ -14,8 +14,8 @@ export const BOX_BOTTOM: BoxBounds = { rowMin: 15, rowMax: 18, colMin: GOAL_STAR
 
 /* ─── Team Sides ─── */
 export const HALF: Record<string, HalfBounds> = {
-  A: { rowMin: 0, rowMax: 8 },
-  B: { rowMin: 10, rowMax: 18 },
+  A: { rowMin: 10, rowMax: 18 },  // Team Blue (己隊) at bottom
+  B: { rowMin: 0, rowMax: 8 },    // Team Red at top
 };
 
 /* ─── Piece Type Definitions ─── */

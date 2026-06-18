@@ -26,6 +26,7 @@ interface CellProps {
   col: number;
   row: number;
   isGoalCell: boolean;
+  isCenterLine: boolean;
   isPenalty: boolean;
   isTarget: boolean;
   isPassTgt: boolean;
@@ -37,15 +38,16 @@ interface CellProps {
 }
 
 /* ─── Cell ─── */
-function Cell({ col, row, isGoalCell, isPenalty, isTarget, isPassTgt, isTackleTgt, isDirection, directionIcon, onClick, children }: CellProps) {
+function Cell({ col, row, isGoalCell, isCenterLine, isPenalty, isTarget, isPassTgt, isTackleTgt, isDirection, directionIcon, onClick, children }: CellProps) {
   const isLight = (col + row) % 2 === 0;
   let baseClass = isLight ? 'bg-emerald-700/60' : 'bg-emerald-800/60';
   if (isGoalCell) baseClass = 'goal-zone bg-yellow-600/30';
   if (isPenalty) baseClass = 'bg-blue-900/15';
+  const borderClass = isCenterLine ? 'border-t-2 border-t-white/40' : 'border border-emerald-600/15';
 
   return (
     <motion.div
-      className={`relative flex items-center justify-center ${baseClass} border border-emerald-600/15 cursor-pointer select-none`}
+      className={`relative flex items-center justify-center ${baseClass} ${borderClass} cursor-pointer select-none`}
       style={{ width: 32, height: 32 }}
       onClick={onClick}
       whileHover={{ scale: 1.08 }}
@@ -209,8 +211,8 @@ export default function Board({
           {showLabels && (
             <div className="flex flex-col flex-shrink-0">
               {Array.from({ length: ROWS }, (_, r) => (
-                <div key={`rl-${r}`} className="flex items-center justify-center text-[8px] text-white/30"
-                     style={{ width: 20, height: 32 }}>{r}</div>
+                <div key={`rl-${r}`} className={`flex items-center justify-center text-[8px] ${r === 9 ? 'text-white/60 font-bold' : 'text-white/30'}`}
+                     style={{ width: 20, height: 32 }}>{r === 9 ? '—' : r}</div>
               ))}
             </div>
           )}
@@ -234,6 +236,7 @@ export default function Board({
                     key={`${c}-${r}`}
                     col={c} row={r}
                     isGoalCell={isGoal(c, r)}
+                    isCenterLine={r === 9}
                     isPenalty={inPenaltyBox(c, r)}
                     isTarget={isTargetCell(c, r)}
                     isPassTgt={isPassTargetCell(c, r)}

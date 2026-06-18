@@ -10,3 +10,4 @@ dist/
 # Build artifacts
 tsconfig.tsbuildinfo
 *.tsbuildinfo
+.vercel

@@ -398,7 +398,7 @@ export default function useGame() {
         if (targetPiece.type === 'CF' && hasClearShotToGoal(targetPiece, newPieces)) {
           message = `⚡ Striker Instinct! ${PIECE_TYPES.CF.name} auto-shoots!`;
           const team = targetPiece.team;
-          const goalDir = team === 'A' ? CARDINAL[1] : CARDINAL[0];
+          const goalDir = team === 'A' ? CARDINAL[0] : CARDINAL[1]; // A(bottom)→up, B(top)→down
           const range = PIECE_TYPES.CF.shootRange;
           let c = targetPiece.col, r = targetPiece.row;
           let scored = false;

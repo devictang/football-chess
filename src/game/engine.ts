@@ -17,7 +17,7 @@ export const inPenaltyBox = (c: number, r: number): boolean =>
   (r >= BOX_TOP.rowMin && r <= BOX_TOP.rowMax && c >= BOX_TOP.colMin && c <= BOX_TOP.colMax) ||
   (r >= BOX_BOTTOM.rowMin && r <= BOX_BOTTOM.rowMax && c >= BOX_BOTTOM.colMin && c <= BOX_BOTTOM.colMax);
 
-export const getTeamBox = (team: string) => team === 'A' ? BOX_TOP : BOX_BOTTOM;
+export const getTeamBox = (team: string) => team === 'A' ? BOX_BOTTOM : BOX_TOP;
 
 /* ─── Team Half ─── */
 export const inOwnHalf = (team: string, r: number): boolean => {
@@ -167,8 +167,8 @@ export function hasClearShotToGoal(piece: Piece, pieces: Piece[]): boolean {
   const type = PIECE_TYPES[piece.type];
   const range = type.shootRange;
   const dirs: Direction[] = piece.team === 'A'
-    ? [CARDINAL[1]]  // A attacks downward
-    : [CARDINAL[0]]; // B attacks upward
+    ? [CARDINAL[0]]  // A at bottom → attacks upward
+    : [CARDINAL[1]]; // B at top → attacks downward
 
   for (const d of dirs) {
     let c = piece.col, r = piece.row;
@@ -209,8 +209,8 @@ export function hasClearShotToGoal(piece: Piece, pieces: Piece[]): boolean {
 /* ─── Default formation ─── */
 export function getDefaultFormation(team: string): Piece[] {
   const r: Record<string, number> = team === 'A'
-    ? { GK: 2, DF: 4, MF: 6, WG: 8, CF: 8 }
-    : { GK: 16, DF: 14, MF: 12, WG: 10, CF: 10 };
+    ? { GK: 16, DF: 14, MF: 12, WG: 10, CF: 10 }  // A at bottom half
+    : { GK: 2, DF: 4, MF: 6, WG: 8, CF: 8 };      // B at top half
 
   const template: Array<{ type: string; col: number }> = [
     { type: 'GK', col: 7 },
