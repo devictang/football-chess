@@ -731,38 +731,11 @@ export default function useGame() {
         // Don't increment turnNumber — conceding team kicks off within the same game period
       }
 
-      // Reset counter-tackle for team that just finished (their next turn they can tackle again)
-      if (nextTurn !== prev.turn) {
-        newPieces.forEach(p => {
-          // Clear stun for the team that just finished (their stunned piece served its penalty)
-          if (p.stunned && p.team === prev.turn) {
-            p.stunned = false;
-          }
-        });
-      }
-
       // GK pass-out tracking: if GK has the ball now (and didn't just pass out), must pass next turn
       if (!newGkMustPassOut) {
         const holder = newPieces.find(p => p.id === newBallHolderId);
         if (holder && holder.type === 'GK') {
           newGkMustPassOut = true;
-        }
-      }
-
-      // GK pass-out auto-turnover: if GK still has ball and must pass but turn switched
-      if (newGkMustPassOut && nextTurn !== prev.turn) {
-        const holder = newPieces.find(p => p.id === newBallHolderId);
-        if (holder && holder.type === 'GK' && holder.team !== nextTurn) {
-          message = '⏰ GK failed to pass out in time! Ball turned over to opponent.';
-          holder.hasBall = false;
-          const oppTeam = oppositeTeam(holder.team);
-          const ffp = getFurthestForwardPlayer(oppTeam, newPieces);
-          if (ffp) {
-            ffp.hasBall = true;
-            newBallHolderId = ffp.id;
-          }
-          newLastTouch = null;
-          newGkMustPassOut = false;
         }
       }
 
@@ -788,8 +761,43 @@ export default function useGame() {
     setState(prev => {
       if (prev.phase !== 'playing') return prev;
       const next = oppositeTeam(prev.turn);
+      let message = `⏭️ Turn ended. ${next === 'A' ? "🔵 Team Blue" : "🔴 Team Red"}'s turn.`;
+
+      // Clear stun for the team that just finished
+      let updatedPieces = prev.pieces.map(p =>
+        p.stunned && p.team === prev.turn ? { ...p, stunned: false } : p
+      );
+
+      // GK pass-out timeout: if GK still has ball when turn ends, turnover
+      let newBallHolderId = prev.ballHolderId;
+      let newGkMustPassOut = prev.gkMustPassOut;
+      let newBallPosition = prev.ballPosition;
+      let newLastTouch = prev.lastTouch;
+      if (prev.gkMustPassOut) {
+        const holder = updatedPieces.find(p => p.id === prev.ballHolderId);
+        if (holder && holder.type === 'GK' && holder.team === prev.turn) {
+          message = '⏰ GK failed to pass out in time! Ball turned over to opponent.';
+          holder.hasBall = false;
+          const oppTeam = oppositeTeam(holder.team);
+          const ffp = getFurthestForwardPlayer(oppTeam, updatedPieces);
+          if (ffp) {
+            ffp.hasBall = true;
+            newBallHolderId = ffp.id;
+          } else {
+            newBallHolderId = null;
+          }
+          newLastTouch = null;
+          newGkMustPassOut = false;
+        }
+      }
+
       return {
         ...prev,
+        pieces: updatedPieces,
+        ballHolderId: newBallHolderId,
+        ballPosition: newBallPosition,
+        lastTouch: newLastTouch,
+        gkMustPassOut: newGkMustPassOut,
         selectedPieceId: null,
         selectedAction: null,
         validTargets: [],
@@ -801,7 +809,7 @@ export default function useGame() {
         actedPieces: [],
         extraAction: false,
         extraActionPieceId: null,
-        message: `⏭️ Turn ended. ${next === 'A' ? "🔵 Team Blue" : "🔴 Team Red"}'s turn.`,
+        message,
       };
     });
   }, []);

@@ -138,7 +138,7 @@ function PieceView({ piece, isSelected, isBallHolder, isGkInvincible, isStunned,
 
   return (
     <motion.div
-      className={`absolute inset-0.5 rounded-full bg-gradient-to-br ${teamGrad} ${borderRing} ${gkShield} flex items-center justify-center z-20 cursor-pointer ${isStunned ? 'opacity-50 saturate-0' : ''}`}
+      className={`absolute inset-0.5 rounded-full bg-gradient-to-br ${teamGrad} ${borderRing} ${gkShield} flex items-center justify-center z-20 cursor-pointer ${isStunned ? 'opacity-70 grayscale-[40%] ring-2 ring-gray-400/60 ring-offset-0' : ''}`}
       onClick={(e) => { e.stopPropagation(); onClick(); }}
       layout
       transition={{ type: 'spring', stiffness: 300, damping: 25, mass: 0.8 }}
@@ -149,7 +149,7 @@ function PieceView({ piece, isSelected, isBallHolder, isGkInvincible, isStunned,
       </span>
       {isBallHolder && <span className="absolute -top-1 -right-1 text-[10px] z-30">⚽</span>}
       {isGkInvincible && <span className="absolute -bottom-1 text-[8px] z-30 drop-shadow-md">🛡️</span>}
-      {isStunned && <span className="absolute -bottom-1 text-[8px] z-30 drop-shadow-md">💫</span>}
+      {isStunned && <span className="absolute -inset-1 flex items-center justify-center text-[14px] z-30 drop-shadow-md">💫</span>}
     </motion.div>
   );
 }
