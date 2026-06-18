@@ -187,7 +187,7 @@ export default function Board({
     if ((dc === 0 || dr === 0) && !(dc === 0 && dr === 0)) {
       const dir: Direction = { dc: Math.sign(dc), dr: Math.sign(dr) };
       const active = (validTargets as Direction[]).some(t => t.dc === dir.dc && t.dr === dir.dr);
-      const icon = selectedAction === 'shoot' ? '⚡' : selectedAction === 'chip' ? '🏐' : '➡️';
+      const icon = selectedAction === 'shoot' ? '⚡' : selectedAction === 'chip' ? '🏐' : '💨';
       return { active, icon };
     }
     return { active: false, icon: '' };

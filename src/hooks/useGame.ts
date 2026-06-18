@@ -201,7 +201,7 @@ export default function useGame() {
 
       if (type.canShoot && piece.hasBall && !prev.firstTurn) actions.push('shoot');
       if (type.canChip && piece.hasBall && !prev.firstTurn) actions.push('chip');
-      if (piece.hasBall && !prev.firstTurn && !prev.extraAction) actions.push('through-ball');
+      if (piece.hasBall && type.canShoot && !prev.firstTurn && !prev.extraAction) actions.push('through-ball');
 
       return {
         ...prev,
@@ -257,9 +257,11 @@ export default function useGame() {
       }
 
       if (action === 'through-ball') {
+        const type = PIECE_TYPES[piece.type];
+        const range = type.shootRange;
         const dirs: Direction[] = [];
         for (const d of CARDINAL) {
-          const path = getShotPath(piece.col, piece.row, d, prev.pieces, 10);
+          const path = getShotPath(piece.col, piece.row, d, prev.pieces, range);
           if (path.length > 1) dirs.push({ ...d });
         }
         return {
@@ -533,8 +535,9 @@ export default function useGame() {
         kicker.hasBall = false;
         let c = piece.col, r = piece.row;
         let claimedBy: Piece | null = null;
+        const tbRange = PIECE_TYPES[piece.type].shootRange;
 
-        for (let step = 1; step <= 10; step++) {
+        for (let step = 1; step <= tbRange; step++) {
           c += dir.dc; r += dir.dr;
           if (!inBounds(c, r)) break;
 

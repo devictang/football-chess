@@ -208,15 +208,19 @@ export function hasClearShotToGoal(piece: Piece, pieces: Piece[]): boolean {
 
 /* ─── Default formation ─── */
 export function getDefaultFormation(team: string): Piece[] {
-  const r: Record<string, number> = team === 'A'
+  const isA = team === 'A';
+  const r: Record<string, number> = isA
     ? { GK: 16, DF: 14, MF: 12, WG: 10, CF: 10 }  // A at bottom half
     : { GK: 2, DF: 4, MF: 6, WG: 8, CF: 8 };      // B at top half
 
+  // Pieces aligned on columns 4/7/10 for horizontal + vertical passes:
+  // GK(7) → MF(7) vertical line; CF(7) ↔ WG(4/10) horizontal; DF(6/8) ↔ MF(7/8)
+  const colOffset = isA ? 0 : 0; // same cols for both teams
   const template: Array<{ type: string; col: number }> = [
     { type: 'GK', col: 7 },
-    { type: 'DF', col: 5 }, { type: 'DF', col: 9 },
-    { type: 'MF', col: 4 }, { type: 'MF', col: 10 },
-    { type: 'WG', col: 2 }, { type: 'WG', col: 12 },
+    { type: 'DF', col: 6 }, { type: 'DF', col: 8 },
+    { type: 'MF', col: 7 }, { type: 'MF', col: 8 },
+    { type: 'WG', col: 4 }, { type: 'WG', col: 10 },
     { type: 'CF', col: 7 },
   ];
 
