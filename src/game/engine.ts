@@ -96,14 +96,16 @@ export function getValidMoves(piece: Piece, pieces: Piece[], lastTouch: string |
       if (piece.type === 'GK' && !inPenaltyBox(nc, nr)) continue;
 
       if (!occupant) {
-        // Check if moving here puts us adjacent (cardinal) to a ball carrier → tackle
+        // Can't tackle if this piece was just tackled (anti-loop)
         let adjTarget: Piece | null = null;
-        for (const { dc: ndc, dr: ndr } of CARDINAL) {
-          const adj = pieceAt(pieces, nc + ndc, nr + ndr);
-          if (adj && adj.team !== piece.team && adj.hasBall) {
-            if (adj.type === 'GK' && !isGKVulnerable(adj, lastTouch)) continue;
-            adjTarget = adj;
-            break;
+        if (piece.canCounterTackle) {
+          for (const { dc: ndc, dr: ndr } of CARDINAL) {
+            const adj = pieceAt(pieces, nc + ndc, nr + ndr);
+            if (adj && adj.team !== piece.team && adj.hasBall) {
+              if (adj.type === 'GK' && !isGKVulnerable(adj, lastTouch)) continue;
+              adjTarget = adj;
+              break;
+            }
           }
         }
         if (adjTarget) {
@@ -118,7 +120,7 @@ export function getValidMoves(piece: Piece, pieces: Piece[], lastTouch: string |
         // GK invincibility: cannot tackle GK unless vulnerable
         if (occupant.type === 'GK' && !isGKVulnerable(occupant, lastTouch)) {
           // GK is invincible, can't tackle
-        } else {
+        } else if (piece.canCounterTackle) {
           results.push({ col: nc, row: nr, type: 'tackle', targetId: occupant.id });
         }
       }

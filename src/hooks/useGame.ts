@@ -211,8 +211,8 @@ export default function useGame() {
         if (passTargets.length > 0) actions.push('pass');
       }
 
-      if (type.canShoot && piece.hasBall && !prev.firstTurn) actions.push('shoot');
-      if (type.canChip && piece.hasBall && !prev.firstTurn) actions.push('chip');
+      if (type.canShoot && piece.hasBall && !prev.firstTurn && !prev.extraAction) actions.push('shoot');
+      if (type.canChip && piece.hasBall && !prev.firstTurn && !prev.extraAction) actions.push('chip');
       if (piece.hasBall && type.canShoot && !prev.firstTurn && !prev.extraAction) actions.push('through-ball');
 
       // GK pass-out: only allow pass for GK when gkMustPassOut is active
@@ -350,7 +350,8 @@ export default function useGame() {
               newExtraAction = true;
               message = `${PIECE_TYPES[piece.type].name} tackled! Extra move.`;
             } else {
-              message = `${PIECE_TYPES[piece.type].name} tackled!`;
+              newExtraAction = true;
+              message = `${PIECE_TYPES[piece.type].name} tackled! Extra move.`;
             }
           } else {
             return prev;
@@ -373,14 +374,10 @@ export default function useGame() {
         }
 
         // Turn switch logic
-        if (piece.type === 'MF' && newExtraAction && validTarget.type === 'tackle') {
-          // Keep same turn (extra action granted)
-        } else if (newExtraAction && piece.type === 'MF' && validTarget.type !== 'tackle') {
-          newExtraAction = false;
-          nextTurn = oppositeTeam(prev.turn);
-          if (nextTurn === 'A') newTurnNumber++;
-          newFirstTurn = false;
+        if (newExtraAction && validTarget.type === 'tackle') {
+          // Extra action granted — same turn continues
         } else {
+          if (newExtraAction) newExtraAction = false;
           nextTurn = oppositeTeam(prev.turn);
           if (nextTurn === 'A') newTurnNumber++;
           newFirstTurn = false;
@@ -650,9 +647,11 @@ export default function useGame() {
         newExtraAction = false;
       }
 
-      // Reset counter-tackle on turn switch
+      // Reset counter-tackle for team that just finished (their next turn they can tackle again)
       if (nextTurn !== prev.turn) {
-        newPieces.forEach(p => { p.canCounterTackle = true; });
+        newPieces.forEach(p => {
+          if (p.team === prev.turn) p.canCounterTackle = true;
+        });
       }
 
       // GK pass-out tracking: if GK has the ball now (and didn't just pass out), must pass next turn
