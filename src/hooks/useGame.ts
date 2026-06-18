@@ -10,6 +10,7 @@ import {
   isGKVulnerable, isValidSetupPlacement,
   createEmptyPieces, getDefaultFormation,
   hasClearShotToGoal, findVacantAdjacent, oppositeTeam,
+  getFurthestForwardPlayer,
 } from '../game/engine';
 
 const INITIAL_STATE: GameState = {
@@ -32,6 +33,7 @@ const INITIAL_STATE: GameState = {
   setupPieceIndex: 0,
   setupTeam: 'A',
   firstTurn: true,
+  gkMustPassOut: false,
 };
 
 export default function useGame() {
@@ -188,13 +190,22 @@ export default function useGame() {
       if (!piece || !piece.active) return prev;
       if (piece.team !== prev.turn) return prev;
 
+      // GK must-pass-out enforcement: if GK has ball and must pass out,
+      // prevent selecting other pieces
+      if (prev.gkMustPassOut) {
+        const gk = prev.pieces.find(p => p.type === 'GK' && p.team === prev.turn && p.active);
+        if (gk && gk.hasBall && piece.id !== gk.id) {
+          return { ...prev, message: "🧤 Goalkeeper must pass the ball out of the penalty box this turn!" };
+        }
+      }
+
       const type = PIECE_TYPES[piece.type];
       const actions: Action[] = [];
 
-      const moves = getValidMoves(piece, prev.pieces);
+      const moves = getValidMoves(piece, prev.pieces, prev.lastTouch);
       if (moves.length > 0) actions.push('move');
 
-      if (!prev.extraAction) {
+      if (!prev.extraAction && piece.hasBall) {
         const passTargets = getValidPassTargets(piece, prev.pieces);
         if (passTargets.length > 0) actions.push('pass');
       }
@@ -203,12 +214,18 @@ export default function useGame() {
       if (type.canChip && piece.hasBall && !prev.firstTurn) actions.push('chip');
       if (piece.hasBall && type.canShoot && !prev.firstTurn && !prev.extraAction) actions.push('through-ball');
 
+      // GK pass-out: only allow pass for GK when gkMustPassOut is active
+      let filteredActions = actions;
+      if (prev.gkMustPassOut && piece.type === 'GK') {
+        filteredActions = actions.filter(a => a === 'pass');
+      }
+
       return {
         ...prev,
         selectedPieceId: pieceId,
         validTargets: moves,
         selectedAction: null,
-        availableActions: actions,
+        availableActions: filteredActions,
         message: `Selected ${type.name}. Choose action.`,
       };
     });
@@ -225,7 +242,7 @@ export default function useGame() {
         return {
           ...prev,
           selectedAction: 'move',
-          validTargets: getValidMoves(piece, prev.pieces),
+          validTargets: getValidMoves(piece, prev.pieces, prev.lastTouch),
           message: 'Click a highlighted cell to move/tackle.',
         };
       }
@@ -294,6 +311,7 @@ export default function useGame() {
       let newLastTackledId = prev.lastTackledId;
       let newLastTouch = prev.lastTouch;
       let newFirstTurn = prev.firstTurn;
+      let newGkMustPassOut = prev.gkMustPassOut;
       let gameOver = false;
 
       /* ── MOVE / TACKLE ── */
@@ -387,14 +405,40 @@ export default function useGame() {
           if (nextTurn === 'A') newTurnNumber++;
           newFirstTurn = false;
           newExtraAction = false;
+          newGkMustPassOut = true; // GK just intercepted
           return produceResult(prev, newPieces, message, nextTurn, newTurnNumber,
-            newBallHolderId, newScore, newExtraAction, newLastTackledId, newLastTouch, newFirstTurn, gameOver);
+            newBallHolderId, newScore, newExtraAction, newLastTackledId, newLastTouch, newFirstTurn, gameOver, newGkMustPassOut);
         }
 
         passer.hasBall = false;
         targetPiece.hasBall = true;
         newBallHolderId = targetPiece.id;
         newLastTouch = passer.team;
+
+        // GK must-pass-out enforcement
+        if (prev.gkMustPassOut && piece.type === 'GK') {
+          if (inPenaltyBox(targetPiece.col, targetPiece.row)) {
+            // Violation: GK passed to someone still in the box → turnover
+            message = '⚠️ GK pass-out violation! Ball turned over to opponent.';
+            passer.hasBall = false;
+            targetPiece.hasBall = false;
+            const oppTeam = oppositeTeam(passer.team);
+            const ffp = getFurthestForwardPlayer(oppTeam, newPieces);
+            if (ffp) {
+              ffp.hasBall = true;
+              newBallHolderId = ffp.id;
+            }
+            newLastTouch = null;
+            newGkMustPassOut = false;
+            nextTurn = oppTeam;
+            if (nextTurn === 'A') newTurnNumber++;
+            newFirstTurn = false;
+            newExtraAction = false;
+            return produceResult(prev, newPieces, message, nextTurn, newTurnNumber,
+              newBallHolderId, newScore, newExtraAction, newLastTackledId, newLastTouch, newFirstTurn, gameOver, newGkMustPassOut);
+          }
+          newGkMustPassOut = false; // GK successfully passed out
+        }
 
         // CF Striker Instinct
         if (targetPiece.type === 'CF' && hasClearShotToGoal(targetPiece, newPieces)) {
@@ -580,8 +624,33 @@ export default function useGame() {
         newPieces.forEach(p => { p.canCounterTackle = true; });
       }
 
+      // GK pass-out tracking: if GK has the ball now (and didn't just pass out), must pass next turn
+      if (!newGkMustPassOut) {
+        const holder = newPieces.find(p => p.id === newBallHolderId);
+        if (holder && holder.type === 'GK') {
+          newGkMustPassOut = true;
+        }
+      }
+
+      // GK pass-out auto-turnover: if GK still has ball and must pass but turn switched
+      if (newGkMustPassOut && nextTurn !== prev.turn) {
+        const holder = newPieces.find(p => p.id === newBallHolderId);
+        if (holder && holder.type === 'GK' && holder.team !== nextTurn) {
+          message = '⏰ GK failed to pass out in time! Ball turned over to opponent.';
+          holder.hasBall = false;
+          const oppTeam = oppositeTeam(holder.team);
+          const ffp = getFurthestForwardPlayer(oppTeam, newPieces);
+          if (ffp) {
+            ffp.hasBall = true;
+            newBallHolderId = ffp.id;
+          }
+          newLastTouch = null;
+          newGkMustPassOut = false;
+        }
+      }
+
       return produceResult(prev, newPieces, message, nextTurn, newTurnNumber,
-        newBallHolderId, newScore, newExtraAction, newLastTackledId, newLastTouch, newFirstTurn, gameOver);
+        newBallHolderId, newScore, newExtraAction, newLastTackledId, newLastTouch, newFirstTurn, gameOver, newGkMustPassOut);
     });
   }, []);
 
@@ -627,6 +696,7 @@ function produceResult(
   newLastTouch: Team | null,
   newFirstTurn: boolean,
   gameOver: boolean,
+  newGkMustPassOut: boolean = false,
 ): GameState {
   if (gameOver) {
     return {
@@ -644,6 +714,7 @@ function produceResult(
       availableActions: [],
       extraAction: false,
       firstTurn: false,
+      gkMustPassOut: false,
     };
   }
 
@@ -663,5 +734,6 @@ function produceResult(
     lastTouch: newLastTouch,
     message,
     firstTurn: newFirstTurn,
+    gkMustPassOut: newGkMustPassOut,
   };
 }

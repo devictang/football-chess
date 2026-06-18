@@ -22,22 +22,22 @@ export const HALF: Record<string, HalfBounds> = {
 export const PIECE_TYPES: Record<string, PieceTypeConfig> = {
   GK: {
     label: 'GK', name: 'Goalkeeper', count: 1,
-    moveRange: 1, passRange: 4, shootRange: 0, chipRange: 0,
+    moveRange: 1, passRange: 3, shootRange: 4, chipRange: 0,
     canMoveDiag: false, canShoot: false, canChip: false,
     tackleRange: 1, interceptZone: 1,
     colorClass: 'from-yellow-400 to-yellow-600',
   },
   DF: {
     label: 'DF', name: 'Defender', count: 2,
-    moveRange: 1, passRange: 5, shootRange: 0, chipRange: 0,
-    canMoveDiag: false, canShoot: false, canChip: false,
+    moveRange: 1, passRange: 5, shootRange: 4, chipRange: 0,
+    canMoveDiag: false, canShoot: true, canChip: false,
     tackleRange: 1, interceptZone: 0,
     colorClass: 'from-blue-400 to-blue-600',
   },
   MF: {
     label: 'MF', name: 'Midfielder', count: 2,
-    moveRange: 1, passRange: 3, shootRange: 0, chipRange: 0,
-    canMoveDiag: false, canShoot: false, canChip: false,
+    moveRange: 1, passRange: 3, shootRange: 4, chipRange: 0,
+    canMoveDiag: false, canShoot: true, canChip: false,
     tackleRange: 1, interceptZone: 0,
     colorClass: 'from-green-400 to-green-600',
     highPressRange: 8,
@@ -46,7 +46,7 @@ export const PIECE_TYPES: Record<string, PieceTypeConfig> = {
   },
   WG: {
     label: 'WG', name: 'Winger', count: 2,
-    moveRange: 2, passRange: 3, shootRange: 5, chipRange: 3,
+    moveRange: 2, passRange: 3, shootRange: 4, chipRange: 3,
     canMoveDiag: true, canShoot: true, canChip: true,
     tackleRange: 1, interceptZone: 0,
     colorClass: 'from-orange-400 to-orange-600',

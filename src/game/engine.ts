@@ -78,7 +78,7 @@ export const isGKVulnerable = (gkPiece: Piece, lastTouch: string | null): boolea
   lastTouch === gkPiece.team;
 
 /* ─── Valid Move Targets ─── */
-export function getValidMoves(piece: Piece, pieces: Piece[]): MoveTarget[] {
+export function getValidMoves(piece: Piece, pieces: Piece[], lastTouch: string | null = null): MoveTarget[] {
   const type = PIECE_TYPES[piece.type];
   const maxRange = type.moveRange;
   const results: MoveTarget[] = [];
@@ -101,7 +101,10 @@ export function getValidMoves(piece: Piece, pieces: Piece[]): MoveTarget[] {
       }
 
       if (occupant.team !== piece.team && occupant.hasBall) {
-        if (step === 1) {
+        // GK invincibility: cannot tackle GK unless vulnerable
+        if (occupant.type === 'GK' && !isGKVulnerable(occupant, lastTouch)) {
+          // GK is invincible, can't tackle
+        } else if (step === 1) {
           results.push({ col: nc, row: nr, type: 'tackle', targetId: occupant.id });
         }
       }
@@ -115,6 +118,8 @@ export function getValidMoves(piece: Piece, pieces: Piece[]): MoveTarget[] {
     for (const cell of zone) {
       const occupant = pieceAt(pieces, cell.col, cell.row);
       if (occupant && occupant.team !== piece.team && occupant.hasBall) {
+        // GK invincibility applies to high-press too
+        if (occupant.type === 'GK' && !isGKVulnerable(occupant, lastTouch)) continue;
         if (!results.some(r => r.col === cell.col && r.row === cell.row)) {
           results.push({ col: cell.col, row: cell.row, type: 'tackle', targetId: occupant.id });
         }
@@ -278,3 +283,13 @@ export function findVacantAdjacent(piece: Piece, pieces: Piece[], excludeCol: nu
 
 /* ─── Opposite team ─── */
 export const oppositeTeam = (t: string): 'A' | 'B' => t === 'A' ? 'B' : 'A';
+
+/* ─── Furthest forward player (for GK pass-out turnover) ─── */
+export function getFurthestForwardPlayer(team: string, pieces: Piece[]): Piece | null {
+  const teamP = pieces.filter(p => p.team === team && p.active);
+  if (teamP.length === 0) return null;
+  // Team A attacks upward (smaller row = more forward), Team B attacks downward (larger row = more forward)
+  return team === 'A'
+    ? teamP.reduce((a, b) => a.row < b.row ? a : b)
+    : teamP.reduce((a, b) => a.row > b.row ? a : b);
+}

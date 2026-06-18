@@ -94,6 +94,7 @@ export interface GameState {
   setupPieceIndex: number;
   setupTeam: Team;
   firstTurn: boolean;
+  gkMustPassOut: boolean;
 }
 
 /* ─── Team Colors ─── */
