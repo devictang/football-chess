@@ -21,7 +21,7 @@ export default function App() {
   } = useGame();
 
   const {
-    phase, pieces, turn, turnNumber, ballHolderId,
+    phase, pieces, turn, turnNumber, ballHolderId, ballPosition,
     selectedPieceId, selectedAction, validTargets, availableActions,
     message, score, extraAction, firstTurn,
     setupPiecesA, setupPiecesB, setupPieceIndex, setupTeam,
@@ -150,6 +150,7 @@ export default function App() {
               selectedAction={selectedAction}
               validTargets={validTargets}
               ballHolderId={ballHolderId}
+              ballPosition={ballPosition}
               turn={turn}
               phase={phase}
               onCellClick={handleCellClick}

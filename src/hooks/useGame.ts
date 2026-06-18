@@ -19,6 +19,7 @@ const INITIAL_STATE: GameState = {
   turn: 'A',
   turnNumber: 1,
   ballHolderId: null,
+  ballPosition: null,
   selectedPieceId: null,
   selectedAction: null,
   validTargets: [],
@@ -312,6 +313,7 @@ export default function useGame() {
       let newLastTouch = prev.lastTouch;
       let newFirstTurn = prev.firstTurn;
       let newGkMustPassOut = prev.gkMustPassOut;
+      let newBallPosition: Position | null = prev.ballPosition;
       let gameOver = false;
 
       /* ── MOVE / TACKLE ── */
@@ -352,6 +354,17 @@ export default function useGame() {
           mover.col = t.col;
           mover.row = t.row;
           message = `Moved to (${t.col}, ${t.row}).`;
+        }
+
+        // Auto-pick up loose ball if moving onto ballPosition
+        if (newBallPosition && mover.col === newBallPosition.col && mover.row === newBallPosition.row) {
+          if (!mover.hasBall) {
+            mover.hasBall = true;
+            newBallHolderId = mover.id;
+            newLastTouch = mover.team;
+            newBallPosition = null;
+            message += ' ⚽ Picked up loose ball!';
+          }
         }
 
         // Turn switch logic
@@ -407,7 +420,7 @@ export default function useGame() {
           newExtraAction = false;
           newGkMustPassOut = true; // GK just intercepted
           return produceResult(prev, newPieces, message, nextTurn, newTurnNumber,
-            newBallHolderId, newScore, newExtraAction, newLastTackledId, newLastTouch, newFirstTurn, gameOver, newGkMustPassOut);
+            newBallHolderId, newScore, newExtraAction, newLastTackledId, newLastTouch, newFirstTurn, gameOver, newGkMustPassOut, newBallPosition);
         }
 
         passer.hasBall = false;
@@ -435,7 +448,7 @@ export default function useGame() {
             newFirstTurn = false;
             newExtraAction = false;
             return produceResult(prev, newPieces, message, nextTurn, newTurnNumber,
-              newBallHolderId, newScore, newExtraAction, newLastTackledId, newLastTouch, newFirstTurn, gameOver, newGkMustPassOut);
+              newBallHolderId, newScore, newExtraAction, newLastTackledId, newLastTouch, newFirstTurn, gameOver, newGkMustPassOut, newBallPosition);
           }
           newGkMustPassOut = false; // GK successfully passed out
         }
@@ -579,11 +592,13 @@ export default function useGame() {
         kicker.hasBall = false;
         let c = piece.col, r = piece.row;
         let claimedBy: Piece | null = null;
+        let lastInBounds: Position = { col: piece.col, row: piece.row };
         const tbRange = PIECE_TYPES[piece.type].shootRange;
 
         for (let step = 1; step <= tbRange; step++) {
           c += dir.dc; r += dir.dr;
           if (!inBounds(c, r)) break;
+          lastInBounds = { col: c, row: r };
 
           const oppGK = newPieces.find(p =>
             p.type === 'GK' && p.active && p.team !== kicker.team
@@ -608,9 +623,20 @@ export default function useGame() {
         }
 
         if (!claimedBy) {
-          message = 'Through ball runs out of play.';
-          const oppGK = newPieces.find(p => p.type === 'GK' && p.active && p.team !== kicker.team);
-          if (oppGK) { oppGK.hasBall = true; newBallHolderId = oppGK.id; newLastTouch = oppGK.team; }
+          // Check if any GK is within 1 cell of landing position
+          const nearbyGK = newPieces.find(p =>
+            p.type === 'GK' && p.active && p.team !== kicker.team
+            && chebDist(p, lastInBounds) <= 1
+          );
+          if (nearbyGK) {
+            nearbyGK.hasBall = true; newBallHolderId = nearbyGK.id; newLastTouch = nearbyGK.team;
+            message = `${PIECE_TYPES.GK.name} collected the loose ball!`;
+          } else {
+            // Ball stops at the last traversed position
+            newBallHolderId = null;
+            newBallPosition = lastInBounds;
+            message = `⚽ Through ball stops at (${lastInBounds.col}, ${lastInBounds.row}).`;
+          }
         }
 
         nextTurn = oppositeTeam(prev.turn);
@@ -650,7 +676,7 @@ export default function useGame() {
       }
 
       return produceResult(prev, newPieces, message, nextTurn, newTurnNumber,
-        newBallHolderId, newScore, newExtraAction, newLastTackledId, newLastTouch, newFirstTurn, gameOver, newGkMustPassOut);
+        newBallHolderId, newScore, newExtraAction, newLastTackledId, newLastTouch, newFirstTurn, gameOver, newGkMustPassOut, newBallPosition);
     });
   }, []);
 
@@ -697,6 +723,7 @@ function produceResult(
   newFirstTurn: boolean,
   gameOver: boolean,
   newGkMustPassOut: boolean = false,
+  newBallPosition: Position | null = null,
 ): GameState {
   if (gameOver) {
     return {
@@ -704,6 +731,7 @@ function produceResult(
       phase: 'gameover',
       pieces: newPieces,
       ballHolderId: newBallHolderId,
+      ballPosition: null,
       score: newScore,
       message: `🏆 GAME OVER! Team ${newScore.A > newScore.B ? 'Blue (A)' : 'Red (B)'} wins!`,
       turn: nextTurn,
@@ -735,5 +763,6 @@ function produceResult(
     message,
     firstTurn: newFirstTurn,
     gkMustPassOut: newGkMustPassOut,
+    ballPosition: newBallPosition,
   };
 }

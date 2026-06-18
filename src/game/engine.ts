@@ -104,7 +104,7 @@ export function getValidMoves(piece: Piece, pieces: Piece[], lastTouch: string |
         // GK invincibility: cannot tackle GK unless vulnerable
         if (occupant.type === 'GK' && !isGKVulnerable(occupant, lastTouch)) {
           // GK is invincible, can't tackle
-        } else if (step === 1) {
+        } else {
           results.push({ col: nc, row: nr, type: 'tackle', targetId: occupant.id });
         }
       }

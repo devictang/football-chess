@@ -58,6 +58,7 @@ export default function SetupPhase({
         selectedAction={null}
         validTargets={[]}
         ballHolderId={null}
+        ballPosition={null}
         turn={setupTeam}
         phase={phase}
         onCellClick={onCellClick}

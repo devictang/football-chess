@@ -80,6 +80,7 @@ export interface GameState {
   turn: Team;
   turnNumber: number;
   ballHolderId: string | null;
+  ballPosition: Position | null;
   selectedPieceId: string | null;
   selectedAction: Action | null;
   validTargets: ValidTarget[];

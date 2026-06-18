@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import type { Piece, Direction, ValidTarget, MoveTarget, PassTarget, GamePhase, Team } from '../types/game';
+import type { Piece, Direction, Position, ValidTarget, MoveTarget, PassTarget, GamePhase, Team } from '../types/game';
 import {
   COLS, ROWS, GOAL_START, GOAL_END,
   BOX_TOP, BOX_BOTTOM, PIECE_TYPES, TEAM_COLORS,
@@ -15,6 +15,7 @@ interface BoardProps {
   selectedAction: string | null;
   validTargets: ValidTarget[];
   ballHolderId: string | null;
+  ballPosition: Position | null;
   turn: Team;
   phase: GamePhase;
   onCellClick: (target: unknown) => void;
@@ -32,13 +33,14 @@ interface CellProps {
   isPassTgt: boolean;
   isTackleTgt: boolean;
   isDirection: boolean;
+  isLooseBall: boolean;
   directionIcon: string;
   onClick: () => void;
   children?: React.ReactNode;
 }
 
 /* ─── Cell ─── */
-function Cell({ col, row, isGoalCell, isCenterLine, isPenalty, isTarget, isPassTgt, isTackleTgt, isDirection, directionIcon, onClick, children }: CellProps) {
+function Cell({ col, row, isGoalCell, isCenterLine, isPenalty, isTarget, isPassTgt, isTackleTgt, isDirection, isLooseBall, directionIcon, onClick, children }: CellProps) {
   const isLight = (col + row) % 2 === 0;
   let baseClass = isLight ? 'bg-emerald-700/60' : 'bg-emerald-800/60';
   if (isGoalCell) baseClass = 'goal-zone bg-yellow-600/30';
@@ -77,12 +79,16 @@ function Cell({ col, row, isGoalCell, isCenterLine, isPenalty, isTarget, isPassT
       )}
       {isDirection && (
         <motion.div
-          className="absolute inset-0 flex items-center justify-center text-lg z-10"
+          className="absolute inset-0 flex items-center justify-center text-xs z-10 text-white/40"
           initial={{ scale: 0.5 }}
           animate={{ scale: 1 }}
         >
           {directionIcon}
         </motion.div>
+      )}
+
+      {isLooseBall && (
+        <span className="absolute z-25 text-sm drop-shadow-lg">⚽</span>
       )}
 
       {children}
@@ -122,7 +128,7 @@ function PieceView({ piece, isSelected, isBallHolder, onClick }: {
 /* ─── Main Board ─── */
 export default function Board({
   pieces, selectedPieceId, selectedAction, validTargets,
-  ballHolderId, turn, phase, onCellClick, onPieceClick, showLabels = true,
+  ballHolderId, ballPosition, turn, phase, onCellClick, onPieceClick, showLabels = true,
 }: BoardProps) {
   const ballHolder = getBallHolder(pieces);
 
@@ -187,8 +193,7 @@ export default function Board({
     if ((dc === 0 || dr === 0) && !(dc === 0 && dr === 0)) {
       const dir: Direction = { dc: Math.sign(dc), dr: Math.sign(dr) };
       const active = (validTargets as Direction[]).some(t => t.dc === dir.dc && t.dr === dir.dr);
-      const icon = selectedAction === 'shoot' ? '⚡' : selectedAction === 'chip' ? '🏐' : '💨';
-      return { active, icon };
+      return { active, icon: '·' };
     }
     return { active: false, icon: '' };
   };
@@ -242,6 +247,7 @@ export default function Board({
                     isPassTgt={isPassTargetCell(c, r)}
                     isTackleTgt={isTackleCell(c, r)}
                     isDirection={dirInfo.active}
+                    isLooseBall={ballPosition !== null && ballPosition.col === c && ballPosition.row === r}
                     directionIcon={dirInfo.icon}
                     onClick={() => handleCellClick(c, r)}
                   >
