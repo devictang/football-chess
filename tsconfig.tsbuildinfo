@@ -1,1 +1,0 @@
-{"root":["./src/App.tsx","./src/main.tsx","./src/vite-env.d.ts","./src/components/ActionPanel.tsx","./src/components/Board.tsx","./src/components/GameOver.tsx","./src/components/SetupPhase.tsx","./src/game/constants.ts","./src/game/engine.ts","./src/hooks/useGame.ts","./src/types/game.ts"],"version":"5.7.3"}

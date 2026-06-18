@@ -6,3 +6,7 @@ dist/
 .env
 .env.local
 .env.*.local
+
+# Build artifacts
+tsconfig.tsbuildinfo
+*.tsbuildinfo
