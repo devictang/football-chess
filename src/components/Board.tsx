@@ -6,7 +6,7 @@ import {
   BOX_TOP, BOX_BOTTOM, PIECE_TYPES, TEAM_COLORS,
   CARDINAL,
 } from '../game/constants';
-import { isGoal, inPenaltyBox, pieceAt, getBallHolder } from '../game/engine';
+import { isGoal, inPenaltyBox, pieceAt, getBallHolder, isGKVulnerable } from '../game/engine';
 
 /* ─── Types ─── */
 interface BoardProps {
@@ -16,6 +16,7 @@ interface BoardProps {
   validTargets: ValidTarget[];
   ballHolderId: string | null;
   ballPosition: Position | null;
+  lastTouch: Team | null;
   turn: Team;
   phase: GamePhase;
   onCellClick: (target: unknown) => void;
@@ -72,9 +73,10 @@ function Cell({ col, row, isGoalCell, isCenterLine, isPenalty, isTarget, isPassT
       )}
       {isPassTgt && (
         <motion.div
-          className="absolute inset-1 rounded-full bg-blue-400/60 border-2 border-blue-300 z-10"
-          initial={{ scale: 0.5, opacity: 0 }}
+          className="absolute inset-0 rounded-full bg-blue-400/30 border-2 border-blue-300/70 z-10"
+          initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: 'spring', stiffness: 300, damping: 20 }}
         />
       )}
       {isDirection && (
@@ -97,10 +99,12 @@ function Cell({ col, row, isGoalCell, isCenterLine, isPenalty, isTarget, isPassT
 }
 
 /* ─── Piece View ─── */
-function PieceView({ piece, isSelected, isBallHolder, onClick }: {
+function PieceView({ piece, isSelected, isBallHolder, isGkInvincible, cannotTackle, onClick }: {
   piece: Piece;
   isSelected: boolean;
   isBallHolder: boolean;
+  isGkInvincible: boolean;
+  cannotTackle: boolean;
   onClick: () => void;
 }) {
   const type = PIECE_TYPES[piece.type];
@@ -108,10 +112,11 @@ function PieceView({ piece, isSelected, isBallHolder, onClick }: {
     ? 'from-blue-500 to-blue-700'
     : 'from-red-500 to-red-700';
   const borderRing = isSelected ? 'ring-2 ring-yellow-300 ring-offset-1 ring-offset-gray-900' : '';
+  const gkShield = isGkInvincible ? 'ring-1 ring-yellow-400/60' : '';
 
   return (
     <motion.div
-      className={`absolute inset-0.5 rounded-full bg-gradient-to-br ${teamGrad} ${borderRing} flex items-center justify-center z-20 cursor-pointer`}
+      className={`absolute inset-0.5 rounded-full bg-gradient-to-br ${teamGrad} ${borderRing} ${gkShield} flex items-center justify-center z-20 cursor-pointer ${cannotTackle ? 'opacity-60' : ''}`}
       onClick={(e) => { e.stopPropagation(); onClick(); }}
       layout
       transition={{ type: 'spring', stiffness: 300, damping: 25, mass: 0.8 }}
@@ -121,6 +126,8 @@ function PieceView({ piece, isSelected, isBallHolder, onClick }: {
         {type.label}
       </span>
       {isBallHolder && <span className="absolute -top-1 -right-1 text-[10px] z-30">⚽</span>}
+      {isGkInvincible && <span className="absolute -bottom-1 text-[8px] z-30 drop-shadow-md">🛡️</span>}
+      {cannotTackle && <span className="absolute -bottom-1 text-[8px] z-30 drop-shadow-md">🔒</span>}
     </motion.div>
   );
 }
@@ -128,7 +135,7 @@ function PieceView({ piece, isSelected, isBallHolder, onClick }: {
 /* ─── Main Board ─── */
 export default function Board({
   pieces, selectedPieceId, selectedAction, validTargets,
-  ballHolderId, ballPosition, turn, phase, onCellClick, onPieceClick, showLabels = true,
+  ballHolderId, ballPosition, lastTouch, turn, phase, onCellClick, onPieceClick, showLabels = true,
 }: BoardProps) {
   const ballHolder = getBallHolder(pieces);
 
@@ -256,6 +263,8 @@ export default function Board({
                         piece={p}
                         isSelected={p.id === selectedPieceId}
                         isBallHolder={p.id === ballHolderId}
+                        isGkInvincible={p.type === 'GK' && !isGKVulnerable(p, lastTouch)}
+                        cannotTackle={!p.canCounterTackle}
                         onClick={() => handleCellClick(c, r)}
                       />
                     )}

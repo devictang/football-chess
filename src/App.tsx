@@ -24,7 +24,7 @@ export default function App() {
     phase, pieces, turn, turnNumber, ballHolderId, ballPosition,
     selectedPieceId, selectedAction, validTargets, availableActions,
     message, score, extraAction, firstTurn,
-    setupPiecesA, setupPiecesB, setupPieceIndex, setupTeam,
+    setupPiecesA, setupPiecesB, setupPieceIndex, setupTeam, lastTouch,
   } = state;
 
   const selectedPiece = selectedPieceId
@@ -151,6 +151,7 @@ export default function App() {
               validTargets={validTargets}
               ballHolderId={ballHolderId}
               ballPosition={ballPosition}
+              lastTouch={lastTouch}
               turn={turn}
               phase={phase}
               onCellClick={handleCellClick}

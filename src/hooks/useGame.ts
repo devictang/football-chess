@@ -335,11 +335,16 @@ export default function useGame() {
             newLastTackledId = targetPiece.id;
             targetPiece.canCounterTackle = false;
 
-            mover.col = targetPiece.col;
-            mover.row = targetPiece.row;
-
-            const vacated = findVacantAdjacent(targetPiece, newPieces, piece.col, piece.row);
-            if (vacated) { targetPiece.col = vacated.col; targetPiece.row = vacated.row; }
+            // If moving INTO the opponent's cell, displace them; otherwise (adjacent tackle) they stay
+            if (t.col === targetPiece.col && t.row === targetPiece.row) {
+              mover.col = targetPiece.col;
+              mover.row = targetPiece.row;
+              const vacated = findVacantAdjacent(targetPiece, newPieces, piece.col, piece.row);
+              if (vacated) { targetPiece.col = vacated.col; targetPiece.row = vacated.row; }
+            } else {
+              mover.col = t.col;
+              mover.row = t.row;
+            }
 
             if (piece.type === 'MF') {
               newExtraAction = true;

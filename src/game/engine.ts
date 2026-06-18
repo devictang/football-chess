@@ -96,7 +96,21 @@ export function getValidMoves(piece: Piece, pieces: Piece[], lastTouch: string |
       if (piece.type === 'GK' && !inPenaltyBox(nc, nr)) continue;
 
       if (!occupant) {
-        results.push({ col: nc, row: nr, type: 'move' });
+        // Check if moving here puts us adjacent (cardinal) to a ball carrier → tackle
+        let adjTarget: Piece | null = null;
+        for (const { dc: ndc, dr: ndr } of CARDINAL) {
+          const adj = pieceAt(pieces, nc + ndc, nr + ndr);
+          if (adj && adj.team !== piece.team && adj.hasBall) {
+            if (adj.type === 'GK' && !isGKVulnerable(adj, lastTouch)) continue;
+            adjTarget = adj;
+            break;
+          }
+        }
+        if (adjTarget) {
+          results.push({ col: nc, row: nr, type: 'tackle', targetId: adjTarget.id });
+        } else {
+          results.push({ col: nc, row: nr, type: 'move' });
+        }
         continue;
       }
 
