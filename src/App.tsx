@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import useGame from './hooks/useGame';
 import Board from './components/Board';
@@ -22,6 +22,7 @@ export default function App() {
     cancelSelection,
     endTurn,
     restart,
+    clearGoalAnimation,
   } = useGame();
 
   const {
@@ -29,12 +30,20 @@ export default function App() {
     selectedPieceId, selectedAction, validTargets, availableActions,
     message, score, extraAction, firstTurn, actionPoints, actedPieces,
     setupPiecesA, setupPiecesB, setupTeam, lastTouch, gameMode,
-    setupSelectedPieceId,
+    setupSelectedPieceId, passRangeCells, goalAnimation,
   } = state;
 
   const selectedPiece = selectedPieceId
     ? pieces.find(p => p.id === selectedPieceId) ?? null
     : null;
+
+  // Auto-clear goal animation after 1.5s
+  useEffect(() => {
+    if (goalAnimation) {
+      const timer = setTimeout(() => clearGoalAnimation(), 1800);
+      return () => clearTimeout(timer);
+    }
+  }, [goalAnimation, clearGoalAnimation]);
 
   /* ─── Unified click handler ─── */
   const handleCellClick = (target: unknown) => {
@@ -168,6 +177,28 @@ export default function App() {
   if (phase === 'playing') {
     return (
       <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-start py-2 px-1">
+        {/* GOAL Animation Overlay */}
+        <AnimatePresence>
+          {goalAnimation && (
+            <motion.div
+              className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <motion.div
+                className="text-6xl sm:text-8xl font-black text-yellow-400 drop-shadow-[0_0_40px_rgba(250,204,21,0.7)]"
+                initial={{ scale: 0.3, rotate: -10 }}
+                animate={{ scale: 1, rotate: 0 }}
+                exit={{ scale: 1.5, opacity: 0 }}
+                transition={{ type: 'spring', stiffness: 200, damping: 12, mass: 1.5 }}
+              >
+                ⚽ GOAL!
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <h1 className="text-base sm:text-lg font-bold bg-gradient-to-r from-emerald-400 to-blue-400 bg-clip-text text-transparent mb-1">
           ⚽ Football Chess
         </h1>
@@ -183,6 +214,7 @@ export default function App() {
               lastTouch={lastTouch}
               turn={turn}
               phase={phase}
+              passRangeCells={passRangeCells}
               onCellClick={handleCellClick}
               onPieceClick={handlePieceClick}
             />

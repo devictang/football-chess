@@ -160,6 +160,23 @@ export function getValidPassTargets(piece: Piece, pieces: Piece[]): PassTarget[]
   return targets;
 }
 
+/* ─── Pass Range Cells (all cells within Manhattan passRange) ─── */
+export function getPassRangeCells(piece: Piece): Position[] {
+  const type = PIECE_TYPES[piece.type];
+  const maxRange = type.passRange;
+  const cells: Position[] = [];
+  for (let c = piece.col - maxRange; c <= piece.col + maxRange; c++) {
+    for (let r = piece.row - maxRange; r <= piece.row + maxRange; r++) {
+      if (c === piece.col && r === piece.row) continue;
+      if (!inBounds(c, r)) continue;
+      if (manhattan(piece, { col: c, row: r }) <= maxRange) {
+        cells.push({ col: c, row: r });
+      }
+    }
+  }
+  return cells;
+}
+
 /* ─── Shot path ─── */
 export function getShotPath(fromCol: number, fromRow: number, dir: Direction, pieces: Piece[], range: number): PathCell[] {
   const path: PathCell[] = [];

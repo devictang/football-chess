@@ -23,6 +23,7 @@ interface BoardProps {
   onPieceClick: (id: string) => void;
   showLabels?: boolean;
   viewRows?: HalfBounds; // Only render a subset of rows (setup half-view)
+  passRangeCells?: Position[]; // Cells within pass range
 }
 
 interface CellProps {
@@ -37,13 +38,14 @@ interface CellProps {
   isDirection: boolean;
   isGkAura: boolean;
   isLooseBall: boolean;
+  isPassRange: boolean;
   directionIcon: string;
   onClick: () => void;
   children?: React.ReactNode;
 }
 
 /* ─── Cell ─── */
-function Cell({ col, row, isGoalCell, isCenterLine, isPenalty, isTarget, isPassTgt, isTackleTgt, isDirection, isGkAura, isLooseBall, directionIcon, onClick, children }: CellProps) {
+function Cell({ col, row, isGoalCell, isCenterLine, isPenalty, isTarget, isPassTgt, isTackleTgt, isDirection, isGkAura, isLooseBall, isPassRange, directionIcon, onClick, children }: CellProps) {
   const isLight = (col + row) % 2 === 0;
   let baseClass = isLight ? 'bg-emerald-700/60' : 'bg-emerald-800/60';
   if (isGoalCell) baseClass = 'goal-zone bg-yellow-500/25';
@@ -116,6 +118,14 @@ function Cell({ col, row, isGoalCell, isCenterLine, isPenalty, isTarget, isPassT
         <span className="absolute z-25 text-sm drop-shadow-lg">⚽</span>
       )}
 
+      {isPassRange && !isPassTgt && !isDirection && !isTarget && !isTackleTgt && (
+        <motion.div
+          className="absolute inset-0 bg-blue-400/8 z-3"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+        />
+      )}
+
       {children}
     </motion.div>
   );
@@ -158,7 +168,7 @@ function PieceView({ piece, isSelected, isBallHolder, isGkInvincible, isStunned,
 /* ─── Main Board ─── */
 export default function Board({
   pieces, selectedPieceId, selectedAction, validTargets,
-  ballHolderId, ballPosition, lastTouch, turn, phase, onCellClick, onPieceClick, showLabels = true, viewRows,
+  ballHolderId, ballPosition, lastTouch, turn, phase, onCellClick, onPieceClick, showLabels = true, viewRows, passRangeCells,
 }: BoardProps) {
   const ballHolder = getBallHolder(pieces);
 
@@ -310,6 +320,7 @@ export default function Board({
                     isDirection={dirInfo.active}
                     isGkAura={isGkAura && phase === 'playing'}
                     isLooseBall={ballPosition !== null && ballPosition.col === c && ballPosition.row === r}
+                    isPassRange={!!passRangeCells?.some(pc => pc.col === c && pc.row === r)}
                     directionIcon={dirInfo.icon}
                     onClick={() => handleCellClick(c, r)}
                   >

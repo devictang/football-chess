@@ -6,7 +6,7 @@ import {
 import {
   inBounds, isGoal, inPenaltyBox, getTeamBox, inOwnHalf,
   chebDist, getValidMoves, getValidPassTargets,
-  getShotPath, pieceAt, teamPieces, getBallHolder,
+  getShotPath, getPassRangeCells, pieceAt, teamPieces, getBallHolder,
   isGKVulnerable, isValidSetupPlacement,
   createEmptyPieces, getDefaultFormation,
   hasClearShotToGoal, findVacantAdjacent, oppositeTeam,
@@ -38,6 +38,8 @@ const INITIAL_STATE: GameState = {
   setupPieceIndex: 0,
   setupTeam: 'A',
   setupSelectedPieceId: null,
+  passRangeCells: [],
+  goalAnimation: false,
   firstTurn: true,
   gkMustPassOut: false,
 };
@@ -47,18 +49,26 @@ export default function useGame() {
 
   /* ─── Quick Start ─── */
   const startGame = useCallback(() => {
-    const piecesA = getDefaultFormation('A');
-    const piecesB = getDefaultFormation('B');
-    const allPieces = [...piecesA, ...piecesB];
-    const cfA = allPieces.find(p => p.team === 'A' && p.type === 'CF');
-    if (cfA) cfA.hasBall = true;
+    let piecesA = getDefaultFormation('A');
+    let piecesB = getDefaultFormation('B');
+    let allPieces = [...piecesA, ...piecesB];
+
+    // Set kickoff: Team A's closest piece to center
+    const teamAPieces = allPieces.filter(p => p.team === 'A');
+    const closest = teamAPieces.reduce((a, b) =>
+      Math.abs(a.row - 9) <= Math.abs(b.row - 9) ? a : b
+    );
+    const kickoffer = allPieces.find(p => p.id === closest.id)!;
+    kickoffer.col = 7;
+    kickoffer.row = 9;
+    kickoffer.hasBall = true;
 
     setState({
       ...INITIAL_STATE,
       gameMode: 'quick',
       phase: 'playing',
       pieces: allPieces,
-      ballHolderId: cfA?.id ?? null,
+      ballHolderId: kickoffer.id,
       turn: 'A',
       actionPoints: 2,
       actedPieces: [],
@@ -215,17 +225,25 @@ export default function useGame() {
 
   /* ─── Helper: transition from setup to playing ─── */
   function startGameAfterSetup(prev: GameState): GameState {
-    const allActive = [
+    let allActive = [
       ...prev.setupPiecesA.filter(p => p.active),
       ...prev.setupPiecesB.filter(p => p.active),
-    ];
-    const cfA = allActive.find(p => p.team === 'A' && p.type === 'CF');
-    if (cfA) cfA.hasBall = true;
+    ].map(p => ({ ...p }));
+
+    // Set kickoff: Team A's closest piece to center
+    const teamAPieces = allActive.filter(p => p.team === 'A');
+    const closest = teamAPieces.reduce((a, b) =>
+      Math.abs(a.row - 9) <= Math.abs(b.row - 9) ? a : b
+    );
+    const kickoffer = allActive.find(p => p.id === closest.id)!;
+    kickoffer.col = 7;
+    kickoffer.row = 9;
+    kickoffer.hasBall = true;
 
     return {
       ...prev,
       pieces: allActive,
-      ballHolderId: cfA?.id ?? null,
+      ballHolderId: kickoffer.id,
       phase: 'playing' as GamePhase,
       turn: 'A' as Team,
       turnNumber: 1,
@@ -358,11 +376,13 @@ export default function useGame() {
       }
 
       if (action === 'pass') {
+        const passCells = getPassRangeCells(piece);
         return {
           ...prev,
           selectedAction: 'pass',
           validTargets: getValidPassTargets(piece, prev.pieces),
-          message: 'Click a teammate to pass to.',
+          passRangeCells: passCells,
+          message: 'Click a highlighted teammate to pass to.',
         };
       }
 
@@ -423,6 +443,7 @@ export default function useGame() {
       let newActedPieces: string[] = [...prev.actedPieces];
       let newGoalKickoff = false;
       let newGoalScoringTeam: Team | null = null;
+      let newGoalAnimation = false;
       let newLastTackledId = prev.lastTackledId;
       let newLastTouch = prev.lastTouch;
       let newFirstTurn = prev.firstTurn;
@@ -544,6 +565,7 @@ export default function useGame() {
             if (!inBounds(c, r)) {
               if (isGoal(c - goalDir.dc, r - goalDir.dr)) {
                 scored = true;
+                newGoalAnimation = true;
                 newScore = { ...newScore, [team]: newScore[team] + 1 };
                 message = `⚽ GOAL! ${PIECE_TYPES.CF.name} scores!`;
                 gameOver = newScore[team] >= GOAL_LIMIT;
@@ -606,6 +628,7 @@ export default function useGame() {
           if (!inBounds(c, r)) {
             if (isGoal(c - dir.dc, r - dir.dr)) {
               scored = true;
+              newGoalAnimation = true;
               shotMsg = `⚽ GOAL! ${type.name} scores!`;
               newScore = { ...newScore, [piece.team]: newScore[piece.team] + 1 };
             } else {
@@ -791,7 +814,7 @@ export default function useGame() {
       }
 
       return produceResult(prev, newPieces, message, nextTurn, newTurnNumber,
-        newBallHolderId, newScore, newExtraAction, newExtraActionPieceId, newLastTackledId, newLastTouch, newFirstTurn, gameOver, newGkMustPassOut, newBallPosition, newActionPoints, newActedPieces);
+        newBallHolderId, newScore, newExtraAction, newExtraActionPieceId, newLastTackledId, newLastTouch, newFirstTurn, gameOver, newGkMustPassOut, newBallPosition, newActionPoints, newActedPieces, newGoalAnimation);
     });
   }, []);
 
@@ -803,6 +826,7 @@ export default function useGame() {
       selectedAction: null,
       validTargets: [],
       availableActions: [],
+      passRangeCells: [],
       message: prev.turn === 'A' ? "🔵 Team Blue's turn." : "🔴 Team Red's turn.",
     }));
   }, []);
@@ -853,6 +877,7 @@ export default function useGame() {
         selectedAction: null,
         validTargets: [],
         availableActions: [],
+        passRangeCells: [],
         turn: next,
         turnNumber: next === 'A' ? prev.turnNumber + 1 : prev.turnNumber,
         firstTurn: false,
@@ -868,6 +893,10 @@ export default function useGame() {
   /* ─── Restart ─── */
   const restart = useCallback(() => setState(INITIAL_STATE), []);
 
+  const clearGoalAnimation = useCallback(() => {
+    setState(prev => ({ ...prev, goalAnimation: false }));
+  }, []);
+
   return {
     state,
     startGame,
@@ -882,6 +911,7 @@ export default function useGame() {
     cancelSelection,
     endTurn,
     restart,
+    clearGoalAnimation,
   };
 }
 
@@ -904,6 +934,7 @@ function produceResult(
   newBallPosition: Position | null = null,
   newActionPoints: number = 2,
   newActedPieces: string[] = [],
+  newGoalAnimation: boolean = false,
 ): GameState {
   if (gameOver) {
     return {
@@ -920,6 +951,8 @@ function produceResult(
       selectedAction: null,
       validTargets: [],
       availableActions: [],
+      passRangeCells: [],
+      goalAnimation: false,
       extraAction: false,
       extraActionPieceId: null,
       actionPoints: 2,
@@ -941,6 +974,8 @@ function produceResult(
     selectedAction: null,
     validTargets: [],
     availableActions: [],
+    passRangeCells: [],
+    goalAnimation: newGoalAnimation,
     extraAction: newExtraAction,
     extraActionPieceId: newExtraActionPieceId,
     actionPoints: newActionPoints,
