@@ -157,7 +157,15 @@ export default function Board({
         if ((dc === 0 || dr === 0) && !(dc === 0 && dr === 0)) {
           const dir: Direction = { dc: Math.sign(dc), dr: Math.sign(dr) };
           const matches = (validTargets as Direction[]).some(t => t.dc === dir.dc && t.dr === dir.dr);
-          if (matches) { onCellClick(dir); return; }
+          if (matches) {
+            // Only fire if within piece's range
+            const ptype = PIECE_TYPES[selPiece.type];
+            const range = selectedAction === 'chip' ? ptype.chipRange : ptype.shootRange;
+            if (Math.abs(dc) + Math.abs(dr) <= range) {
+              onCellClick(dir);
+              return;
+            }
+          }
         }
       }
     }
@@ -200,11 +208,15 @@ export default function Board({
     if ((dc === 0 || dr === 0) && !(dc === 0 && dr === 0)) {
       const dir: Direction = { dc: Math.sign(dc), dr: Math.sign(dr) };
       const active = (validTargets as Direction[]).some(t => t.dc === dir.dc && t.dr === dir.dr);
-      return { active, icon: '·' };
+      if (!active) return { active: false, icon: '' };
+      // Only show dots within piece's range
+      const ptype = PIECE_TYPES[selPiece.type];
+      const range = selectedAction === 'chip' ? ptype.chipRange : ptype.shootRange;
+      const dist = Math.abs(dc) + Math.abs(dr);
+      return { active: dist <= range, icon: '·' };
     }
     return { active: false, icon: '' };
   };
-
   return (
     <div className="board-container inline-block">
       <div className="board-scroll overflow-x-auto overflow-y-auto">
