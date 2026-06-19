@@ -299,10 +299,12 @@ export default function useGame() {
 
       const type = PIECE_TYPES[piece.type];
       const isExtraAction = prev.extraAction;
+      const hasAP = prev.actionPoints > 0;
+      const effectivelyExtraAction = isExtraAction && !hasAP;
       const cost = piece.hasBall ? 2 : 1;
 
-      // Check AP
-      if (!isExtraAction && prev.actionPoints < cost) {
+      // Check AP (skip if free extra action and no AP left)
+      if (!effectivelyExtraAction && prev.actionPoints < cost) {
         return {
           ...prev,
           selectedPieceId: null,
@@ -317,7 +319,7 @@ export default function useGame() {
       const actions: Action[] = [];
       if (moves.length > 0) actions.push('move');
 
-      if (isExtraAction) {
+      if (effectivelyExtraAction) {
         // Extra action from tackle: only move, unless ball-holding MF
         if (piece.type === 'MF' && piece.hasBall) {
           // Ball-holding MF can use full actions during extra action
@@ -770,11 +772,11 @@ export default function useGame() {
         const isExtraAction = prev.extraAction;
         const wasTackle = action === 'move' && (target as any)?.type === 'tackle';
 
-        if (isExtraAction) {
-          // Free extra action consumed
+        if (isExtraAction && prev.actionPoints <= 0) {
+          // Free extra action consumed (only when AP is exhausted)
           newExtraAction = false;
         } else {
-          // Deduct AP
+          // Deduct AP (takes priority over free action when AP available)
           const actedPiece = prev.pieces.find(p => p.id === prev.selectedPieceId);
           const cost = actedPiece?.hasBall ? 2 : 1;
           newActionPoints = prev.actionPoints - cost;
