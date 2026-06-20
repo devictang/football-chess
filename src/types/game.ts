@@ -101,6 +101,7 @@ export interface GameState {
   setupPieceIndex: number;
   setupTeam: Team;
   setupSelectedPieceId: string | null;
+  offsideLine: number | null;
   passRangeCells: Position[];
   goalAnimation: boolean;
   firstTurn: boolean;

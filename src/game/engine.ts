@@ -145,7 +145,11 @@ export function getValidMoves(piece: Piece, pieces: Piece[], lastTouch: string |
 }
 
 /* ─── Valid Pass Targets (Manhattan distance, no straight-line restriction) ─── */
-export function getValidPassTargets(piece: Piece, pieces: Piece[]): PassTarget[] {
+export function getValidPassTargets(
+  piece: Piece,
+  pieces: Piece[],
+  offsideLine: number | null = null
+): PassTarget[] {
   const type = PIECE_TYPES[piece.type];
   const maxRange = type.passRange;
   const targets: PassTarget[] = [];
@@ -154,10 +158,43 @@ export function getValidPassTargets(piece: Piece, pieces: Piece[]): PassTarget[]
     if (!p.active || p.id === piece.id || p.team !== piece.team) continue;
     const dist = manhattan(piece, p);
     if (dist <= maxRange && dist > 0) {
+      // Offside check: cannot pass to offside teammates
+      if (offsideLine !== null && isOffside(p, piece.team, offsideLine)) continue;
       targets.push({ pieceId: p.id, col: p.col, row: p.row, dist });
     }
   }
   return targets;
+}
+
+/* ─── Offside ─── */
+export function getOffsideLine(pieces: Piece[], ballHolder: Piece | null, attackingTeam: string): number | null {
+  if (!ballHolder) return null;
+  const opponentTeam = oppositeTeam(attackingTeam);
+  const oppPlayers = pieces.filter(p => p.team === opponentTeam && p.active);
+  if (oppPlayers.length < 2) return null;
+
+  // Sort by proximity to the attacking team's goal
+  const sorted = [...oppPlayers].sort((a, b) =>
+    attackingTeam === 'A' ? a.row - b.row : b.row - a.row
+  );
+  const secondLastRow = sorted[1].row;
+  const ballRow = ballHolder.row;
+
+  // Offside line = closer to goal between ball and second-last defender
+  return attackingTeam === 'A'
+    ? Math.min(secondLastRow, ballRow)
+    : Math.max(secondLastRow, ballRow);
+}
+
+export function isOffside(piece: Piece, team: string, offsideLine: number): boolean {
+  // Can't be offside in your own half
+  if (team === 'A') {
+    if (piece.row >= 10) return false; // Own half = rows 10-18
+    return piece.row < offsideLine; // Closer to row 0 than offside line
+  } else {
+    if (piece.row <= 8) return false; // Own half = rows 0-8
+    return piece.row > offsideLine; // Closer to row 18 than offside line
+  }
 }
 
 /* ─── Pass Range Cells (all cells within Manhattan passRange) ─── */

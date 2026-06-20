@@ -30,7 +30,7 @@ export default function App() {
     selectedPieceId, selectedAction, validTargets, availableActions,
     message, score, extraAction, firstTurn, actionPoints, actedPieces,
     setupPiecesA, setupPiecesB, setupTeam, lastTouch, gameMode,
-    setupSelectedPieceId, passRangeCells, goalAnimation,
+    setupSelectedPieceId, passRangeCells, goalAnimation, offsideLine,
   } = state;
 
   const selectedPiece = selectedPieceId
@@ -215,6 +215,7 @@ export default function App() {
               turn={turn}
               phase={phase}
               passRangeCells={passRangeCells}
+              offsideLine={offsideLine}
               onCellClick={handleCellClick}
               onPieceClick={handlePieceClick}
             />

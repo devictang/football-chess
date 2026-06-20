@@ -6,7 +6,7 @@ import {
 import {
   inBounds, isGoal, inPenaltyBox, getTeamBox, inOwnHalf,
   chebDist, getValidMoves, getValidPassTargets,
-  getShotPath, getPassRangeCells, pieceAt, teamPieces, getBallHolder,
+  getShotPath, getPassRangeCells, getOffsideLine, pieceAt, teamPieces, getBallHolder,
   isGKVulnerable, isValidSetupPlacement,
   createEmptyPieces, getDefaultFormation,
   hasClearShotToGoal, findVacantAdjacent, oppositeTeam,
@@ -38,6 +38,7 @@ const INITIAL_STATE: GameState = {
   setupPieceIndex: 0,
   setupTeam: 'A',
   setupSelectedPieceId: null,
+  offsideLine: null,
   passRangeCells: [],
   goalAnimation: false,
   firstTurn: true,
@@ -319,6 +320,10 @@ export default function useGame() {
       const actions: Action[] = [];
       if (moves.length > 0) actions.push('move');
 
+      // Compute offside line
+      const ballHolder = getBallHolder(prev.pieces);
+      const offsideLine = getOffsideLine(prev.pieces, ballHolder, prev.turn);
+
       if (effectivelyExtraAction) {
         // Extra action from tackle: only move, unless ball-holding MF
         if (piece.type === 'MF' && piece.hasBall) {
@@ -356,6 +361,7 @@ export default function useGame() {
         validTargets: moves,
         selectedAction: null,
         availableActions: filteredActions,
+        offsideLine,
         message: `Selected ${type.name}.${apMsg}`,
       };
     });
@@ -379,12 +385,17 @@ export default function useGame() {
 
       if (action === 'pass') {
         const passCells = getPassRangeCells(piece);
+        const ballHolder = getBallHolder(prev.pieces);
+        const offsideLine = getOffsideLine(prev.pieces, ballHolder, prev.turn);
         return {
           ...prev,
           selectedAction: 'pass',
-          validTargets: getValidPassTargets(piece, prev.pieces),
+          validTargets: getValidPassTargets(piece, prev.pieces, offsideLine),
           passRangeCells: passCells,
-          message: 'Click a highlighted teammate to pass to.',
+          offsideLine,
+          message: offsideLine !== null
+            ? '🎯 Click a teammate to pass (yellow line = offside, no pass beyond it).'
+            : 'Click a highlighted teammate to pass.',
         };
       }
 
@@ -829,6 +840,7 @@ export default function useGame() {
       validTargets: [],
       availableActions: [],
       passRangeCells: [],
+      offsideLine: null,
       message: prev.turn === 'A' ? "🔵 Team Blue's turn." : "🔴 Team Red's turn.",
     }));
   }, []);
@@ -880,6 +892,7 @@ export default function useGame() {
         validTargets: [],
         availableActions: [],
         passRangeCells: [],
+        offsideLine: null,
         turn: next,
         turnNumber: next === 'A' ? prev.turnNumber + 1 : prev.turnNumber,
         firstTurn: false,
@@ -955,6 +968,7 @@ function produceResult(
       availableActions: [],
       passRangeCells: [],
       goalAnimation: false,
+      offsideLine: null,
       extraAction: false,
       extraActionPieceId: null,
       actionPoints: 2,
@@ -977,6 +991,7 @@ function produceResult(
     validTargets: [],
     availableActions: [],
     passRangeCells: [],
+    offsideLine: null,
     goalAnimation: newGoalAnimation,
     extraAction: newExtraAction,
     extraActionPieceId: newExtraActionPieceId,
